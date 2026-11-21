@@ -1,0 +1,257 @@
+{
+  "$defs": {
+    "NewsItem": {
+      "additionalProperties": true,
+      "properties": {
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string"
+        },
+        "url": {
+          "default": "",
+          "title": "Url",
+          "type": "string"
+        },
+        "source": {
+          "default": "",
+          "title": "Source",
+          "type": "string"
+        },
+        "time": {
+          "default": "",
+          "title": "Time",
+          "type": "string"
+        },
+        "summary": {
+          "default": "",
+          "title": "Summary",
+          "type": "string"
+        },
+        "category": {
+          "default": "other",
+          "title": "Category",
+          "type": "string"
+        },
+        "impact": {
+          "default": "中性",
+          "title": "Impact",
+          "type": "string"
+        },
+        "impact_note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Impact Note"
+        },
+        "horizon": {
+          "default": "短期",
+          "title": "Horizon",
+          "type": "string"
+        },
+        "confidence": {
+          "default": "中",
+          "title": "Confidence",
+          "type": "string"
+        },
+        "logic": {
+          "default": "",
+          "title": "Logic",
+          "type": "string"
+        },
+        "keywords": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Keywords",
+          "type": "array"
+        },
+        "sectors": {
+          "items": {
+            "$ref": "#/$defs/SectorImpact"
+          },
+          "title": "Sectors",
+          "type": "array"
+        },
+        "stocks": {
+          "items": {
+            "$ref": "#/$defs/StockImpact"
+          },
+          "title": "Stocks",
+          "type": "array"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/Source"
+          },
+          "title": "Sources",
+          "type": "array"
+        },
+        "fetched_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fetched By"
+        }
+      },
+      "title": "NewsItem",
+      "type": "object"
+    },
+    "SectorImpact": {
+      "additionalProperties": true,
+      "properties": {
+        "code": {
+          "default": "",
+          "title": "Code",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "dir": {
+          "default": "中性",
+          "title": "Dir",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "title": "SectorImpact",
+      "type": "object"
+    },
+    "Source": {
+      "additionalProperties": true,
+      "description": "检索产物：数字核对与可审计性的前提，没 sources 就不许出「分析」。",
+      "properties": {
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string"
+        },
+        "url": {
+          "default": "",
+          "title": "Url",
+          "type": "string"
+        },
+        "time": {
+          "default": "",
+          "title": "Time",
+          "type": "string"
+        },
+        "snippet": {
+          "default": "",
+          "title": "Snippet",
+          "type": "string"
+        }
+      },
+      "title": "Source",
+      "type": "object"
+    },
+    "StockImpact": {
+      "additionalProperties": true,
+      "properties": {
+        "code": {
+          "default": "",
+          "title": "Code",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "dir": {
+          "default": "中性",
+          "title": "Dir",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "title": "StockImpact",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "properties": {
+    "date": {
+      "title": "Date",
+      "type": "string"
+    },
+    "summary": {
+      "default": "",
+      "title": "Summary",
+      "type": "string"
+    },
+    "window": {
+      "default": "",
+      "title": "Window",
+      "type": "string"
+    },
+    "source_of_truth": {
+      "default": "",
+      "title": "Source Of Truth",
+      "type": "string"
+    },
+    "items": {
+      "items": {
+        "$ref": "#/$defs/NewsItem"
+      },
+      "title": "Items",
+      "type": "array"
+    }
+  },
+  "required": [
+    "date"
+  ],
+  "title": "NewsPatch",
+  "type": "object"
+}

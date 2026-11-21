@@ -1,0 +1,79 @@
+{
+ "code": "sh600519",
+ "name": "贵州茅台",
+ "sector": "食品饮料",
+ "sub": "白酒Ⅱ",
+ "status": "active",
+ "frequency": {
+  "kind": "weekly",
+  "rrule": "FREQ=WEEKLY;BYDAY=MO;BYHOUR=8;BYMINUTE=20",
+  "label": "每周一 08:20",
+  "basis": "白酒基本面变化慢，以批价与季度财报驱动，周频足够捕捉渠道拐点"
+ },
+ "dimensions": [
+  {
+   "key": "wholesale_price",
+   "angle": "industry",
+   "name": "批价与渠道库存",
+   "metric": "飞天散瓶批价、经销商库存周转天数",
+   "cadence": "weekly",
+   "thresholds": {
+    "g": "批价站稳 2700 以上且库存低于 25 天",
+    "y": "批价 2500~2700 或库存 25~35 天",
+    "r": "批价跌破 2500 或库存高于 35 天",
+    "raw": "绿=批价站稳 2700 以上且库存低于 25 天；黄=批价 2500~2700 或库存 25~35 天；红=批价跌破 2500 或库存高于 35 天"
+   },
+   "why": "批价是白酒景气的先行指标，直接决定经销商打款意愿"
+  },
+  {
+   "key": "revenue",
+   "angle": "fundamental",
+   "name": "营收与合同负债",
+   "metric": "单季营收同比、合同负债环比",
+   "cadence": "quarterly",
+   "thresholds": {
+    "g": "营收同比 >12% 且合同负债环比增长",
+    "y": "营收同比 5%~12%",
+    "r": "营收同比 <5% 或合同负债连续两季下滑",
+    "raw": "绿=营收同比 >12% 且合同负债环比增长；黄=营收同比 5%~12%；红=营收同比 <5% 或合同负债连续两季下滑"
+   },
+   "why": "营收增速决定估值中枢，合同负债反映渠道蓄水池深浅"
+  }
+ ],
+ "anchors": {
+  "price": null,
+  "pe_ttm": null,
+  "pb": null,
+  "dividend_yield": null,
+  "pos52": null,
+  "high52": null,
+  "low52": null,
+  "total_mktcap": null,
+  "latest_period": null
+ },
+ "created_at": "2026-01-05 09:30:00",
+ "updated_at": "2026-01-05 09:30:00",
+ "automation": {
+  "id": null,
+  "state": "pending_agent"
+ },
+ "automation_prompt": "执行个股跟踪周报。逐条核对 meta.json 中 dimensions 的指标：只取有明确来源与日期的数字，找不到写「未获取到」不编造；对照绿/黄/红阈值判定状态；命中 invalidation 时在开头标「触发复核」并写清影响链。产出可直接用于开盘前决策的简报，本期无增量的维度写明「本期无增量」。",
+ "schedule": [
+  {
+   "cadence": "weekly",
+   "label": "每周一",
+   "when": "盘前 08:20",
+   "rrule": "FREQ=WEEKLY;BYDAY=MO;BYHOUR=8;BYMINUTE=20",
+   "dimensions": ["批价与渠道库存"],
+   "n": 1
+  },
+  {
+   "cadence": "quarterly",
+   "label": "每季度财报后",
+   "when": "财报披露后首日",
+   "rrule": "FREQ=MONTHLY;BYMONTH=1,4,7,10;BYMONTHDAY=15;BYHOUR=8;BYMINUTE=20",
+   "dimensions": ["营收与合同负债"],
+   "n": 1
+  }
+ ]
+}

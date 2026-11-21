@@ -1,0 +1,5 @@
+{
+  "_note": "交易日历可选配置。默认不提供该文件时只按周末判断交易日；法定休市日会随年份变化，因此这里不硬编码，请按交易所公告自行填写并放到 backend/data/calendar/holidays.json。extra_sessions 用于极少见的调休开市日，可覆盖周末规则。日期格式 YYYY-MM-DD。",
+  "holidays": [],
+  "extra_sessions": []
+}

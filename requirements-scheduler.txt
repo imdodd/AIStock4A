@@ -1,0 +1,8 @@
+# 可选依赖：内置调度的成熟运行时后端。
+# 不装也能跑 —— 调度会自动退回标准库内置的 BuiltinBackend（轮询式，语义等价）。
+# 生产环境建议安装，以获得 APScheduler 的成熟 cron / misfire 处理：
+#     pip install -r requirements-scheduler.txt
+#
+# 明确不用 SQLAlchemyJobStore：它会把 job 对象 pickle 进库，改 handler 签名就
+# 反序列化失败，还会额外拖进 SQLAlchemy。job 定义存在我们自己的 job_defs 表里。
+apscheduler>=3.10,<4

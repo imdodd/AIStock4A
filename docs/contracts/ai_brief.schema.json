@@ -1,0 +1,137 @@
+{
+  "$defs": {
+    "Cause": {
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "default": "",
+          "title": "Type",
+          "type": "string"
+        },
+        "text": {
+          "default": "",
+          "title": "Text",
+          "type": "string"
+        },
+        "weight": {
+          "default": 0.0,
+          "title": "Weight",
+          "type": "number"
+        },
+        "evidence": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "basis": {
+          "default": "",
+          "title": "Basis",
+          "type": "string"
+        }
+      },
+      "title": "Cause",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "properties": {
+    "code": {
+      "default": "",
+      "title": "Code",
+      "type": "string"
+    },
+    "date": {
+      "default": "",
+      "title": "Date",
+      "type": "string"
+    },
+    "headline": {
+      "default": "",
+      "title": "Headline",
+      "type": "string"
+    },
+    "summary": {
+      "default": "",
+      "title": "Summary",
+      "type": "string"
+    },
+    "causes": {
+      "items": {
+        "$ref": "#/$defs/Cause"
+      },
+      "title": "Causes",
+      "type": "array"
+    },
+    "counters": {
+      "items": {},
+      "title": "Counters",
+      "type": "array"
+    },
+    "risks": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Risks",
+      "type": "array"
+    },
+    "watch": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Watch",
+      "type": "array"
+    },
+    "facts": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Facts",
+      "type": "array"
+    },
+    "mode": {
+      "default": "rule",
+      "enum": [
+        "pregen",
+        "llm",
+        "rule"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "generated_at": {
+      "default": "",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "confidence": {
+      "default": "medium",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ],
+      "title": "Confidence",
+      "type": "string"
+    },
+    "fallback_reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Fallback Reason"
+    },
+    "sources": {
+      "default": null,
+      "title": "Sources"
+    }
+  },
+  "title": "AiBrief",
+  "type": "object"
+}

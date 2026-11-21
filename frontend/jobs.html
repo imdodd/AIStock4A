@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>调度任务管理 · 股票跟踪分析平台</title>
+<style>
+:root{
+  --bg:#0a0f1c; --card:#111a2c; --card2:#0e1727; --line:rgba(120,160,220,.16);
+  --txt:#e6edfb; --sub:#8fa2c4; --blue:#5aa9ff; --cyan:#45d6c8;
+  --violet:#a78bfa; --amber:#ffc069; --ok:#45d6c8; --warn:#ffc069; --err:#ff7a8a;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);
+  font:13px/1.55 "Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+  background-image:radial-gradient(900px 420px at 12% -8%,rgba(90,169,255,.10),transparent),
+                   radial-gradient(760px 380px at 92% 0%,rgba(167,139,250,.09),transparent);}
+.wrap{max-width:1180px;margin:0 auto;padding:18px 20px 30px}
+header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+h1{font-size:18px;margin:0;letter-spacing:.4px;font-weight:650}
+h1 span{color:var(--violet)}
+.badge{font-size:11px;padding:3px 9px;border:1px solid var(--line);border-radius:20px;color:var(--sub);background:var(--card2)}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;background:var(--sub)}
+.dot.ok{background:var(--ok);box-shadow:0 0 8px rgba(69,214,200,.6)}
+.dot.warn{background:var(--warn)}
+.grow{flex:1}
+button{background:var(--card);color:var(--txt);border:1px solid var(--line);border-radius:7px;
+  padding:7px 14px;cursor:pointer;font-size:12px;font-family:inherit}
+button:hover{border-color:var(--blue);color:var(--blue)}
+button.primary{background:linear-gradient(135deg,rgba(90,169,255,.24),rgba(167,139,250,.22));
+  border-color:rgba(90,169,255,.5);font-weight:600;padding:9px 22px}
+button.primary:hover{color:#fff;border-color:var(--violet)}
+button.mini{padding:3px 9px;font-size:11px;border-radius:6px}
+button.danger:hover{border-color:var(--err);color:var(--err)}
+button:disabled{opacity:.5;cursor:not-allowed}
+a{color:var(--blue);text-decoration:none}
+.card{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:14px 16px;
+  margin-bottom:12px;box-shadow:0 6px 24px rgba(0,0,0,.22)}
+.card h2{font-size:12px;margin:0 0 3px;color:var(--txt);font-weight:650;letter-spacing:.6px;
+  display:flex;align-items:center;gap:8px}
+.card h2::before{content:"";width:3px;height:13px;border-radius:2px;background:var(--violet)}
+.card h2 .sub{font-size:10px;color:var(--sub);font-weight:400;letter-spacing:0}
+.card .desc{color:var(--sub);font-size:11px;margin:0 0 12px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-bottom:12px}
+@media(max-width:900px){.grid4{grid-template-columns:repeat(2,1fr)}}
+.kv{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:11px 13px;min-width:0}
+.kv label{display:block;font-size:10px;color:var(--sub);margin-bottom:3px}
+.kv b{font-size:14px;font-weight:650;color:var(--txt)}
+.kv small{display:block;font-size:10px;color:var(--sub);margin-top:2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:11px}
+label{display:block;font-size:11px;color:var(--sub);margin-bottom:4px}
+label b{color:var(--txt);font-weight:500}
+input,select{width:100%;background:var(--card2);color:var(--txt);border:1px solid var(--line);
+  border-radius:7px;padding:8px 10px;font-size:12px;font-family:inherit;outline:none}
+input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(90,169,255,.14)}
+input.mono,select.mono{font-family:ui-monospace,Consolas,monospace;font-size:11px}
+input::placeholder{color:#5f7394}
+table{width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed}
+th{text-align:left;color:var(--sub);font-weight:500;padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:8px;border-bottom:1px solid rgba(120,160,220,.08);vertical-align:middle;min-width:0}
+tr:last-child td{border-bottom:none}
+tbody tr:hover{background:rgba(90,169,255,.04)}
+td.nm{font-weight:600;color:var(--txt)}
+td.nm small{display:block;font-weight:400;color:var(--sub);font-size:10px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+td.mono{font-family:ui-monospace,Consolas,monospace;color:var(--amber);font-size:10px}
+td.mut{color:var(--sub)}
+td.ops{white-space:nowrap;text-align:right}
+td.ops button{margin-left:5px}
+.tag{display:inline-block;font-size:10px;padding:2px 7px;border-radius:5px;white-space:nowrap;
+  background:rgba(69,214,200,.12);color:var(--ok);border:1px solid rgba(69,214,200,.28)}
+.tag.off{background:rgba(143,162,196,.10);color:var(--sub);border-color:var(--line)}
+.tag.fixed{background:rgba(167,139,250,.10);color:var(--violet);border-color:rgba(167,139,250,.28)}
+.tag.err{background:rgba(255,122,138,.10);color:var(--err);border-color:rgba(255,122,138,.3)}
+.empty{padding:18px 10px;text-align:center;color:var(--sub);font-size:11px;line-height:1.8}
+.actions{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-top:13px}
+.hint{font-size:11px;color:var(--sub);line-height:1.7}
+.msg{margin-bottom:12px;padding:9px 12px;border-radius:8px;font-size:12px;line-height:1.6;
+  border:1px solid rgba(69,214,200,.32);background:rgba(69,214,200,.08);color:var(--ok)}
+.msg.err{border-color:rgba(255,122,138,.38);background:rgba(255,122,138,.08);color:var(--err)}
+.msg.warn{border-color:rgba(255,192,105,.35);background:rgba(255,192,105,.08);color:var(--warn)}
+.safe{margin-top:14px;padding:11px 13px;border-radius:9px;font-size:11px;line-height:1.75;
+  border:1px solid rgba(255,192,105,.3);background:rgba(255,192,105,.06);color:var(--sub)}
+.safe b{color:var(--warn)}
+code{background:var(--card2);padding:1px 5px;border-radius:4px;color:var(--amber);font-size:11px}
+footer{margin-top:15px;color:var(--sub);font-size:11px;line-height:1.7;
+  border-top:1px solid var(--line);padding-top:11px}
+.scroll{overflow:auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>调度任务 <span>/ JOBS</span></h1>
+  <span class="badge"><i class="dot" id="schedDot"></i><span id="schedText">检查中…</span></span>
+  <span class="badge">实例 <span id="inst">—</span></span>
+  <span class="grow"></span>
+  <button type="button" onclick="loadAll()">刷新</button>
+  <a href="/static/config.html"><button>密钥配置</button></a>
+  <a href="/static/ops.html"><button>运行监控</button></a>
+  <a href="/"><button>返回主界面</button></a>
+</header>
+
+<div id="alert"></div>
+<div class="grid4" id="overview"></div>
+
+<section class="card">
+  <h2>任务列表 <span class="sub" id="jobsCount"></span></h2>
+  <p class="desc">固定任务由代码定义，只能查看与手工触发；自定义任务存在本机 SQLite，可启停、改 cron、改参数与删除。所有操作只作用于当前实例。</p>
+  <div class="scroll" id="jobBox"><div class="empty">读取中…</div></div>
+</section>
+
+<section class="card" id="editorCard">
+  <h2 id="editorTitle">新增自定义任务</h2>
+  <p class="desc">自定义任务是固定 7 个 job 之外的补充；<code>job_type</code> 必须是已注册的处理器，<code>params</code> 必须是 JSON 对象。</p>
+  <form id="jobForm" autocomplete="off">
+    <div class="row">
+      <div><label>任务 ID <b>id</b></label><input id="f_id" class="mono" placeholder="my_custom_job"></div>
+      <div><label>处理器 <b>job_type</b></label><select id="f_job_type" class="mono"></select></div>
+      <div><label>cron 表达式 <b>分 时 日 月 周</b></label><input id="f_cron" class="mono" placeholder="0 9 * * 1-5"></div>
+      <div><label>状态 <b>enabled</b></label><select id="f_enabled" class="mono"><option value="1">启用</option><option value="0">停用</option></select></div>
+      <div style="grid-column:1/-1"><label>参数 <b>params</b>（JSON 对象，留空为 {}）</label><input id="f_params" class="mono" placeholder='{"cad":"daily"}'></div>
+      <div style="grid-column:1/-1"><label>备注 <b>note</b></label><input id="f_note" placeholder="给这个任务写个说明"></div>
+    </div>
+    <div class="actions">
+      <button type="submit" class="primary" id="f_submit">保存任务</button>
+      <button type="button" id="f_cancel" style="display:none">取消编辑</button>
+      <span class="hint">保存后立即注册到调度器，无需重启服务。</span>
+    </div>
+  </form>
+</section>
+
+<section class="card">
+  <h2>运行记录 <span class="sub" id="runsCount"></span></h2>
+  <p class="desc">同一交易日同一任务由 <code>job_runs</code> 原子去重；手工触发会先清当日锁再重跑，所以你会在这里看到覆盖后的最新结果。</p>
+  <div class="scroll" id="runBox"><div class="empty">读取中…</div></div>
+</section>
+
+<section class="card">
+  <h2>交易日历</h2>
+  <p class="desc">交易日过滤由服务端统一执行；留空查今天。节假日表来自本地日历文件，不依赖联网。</p>
+  <div class="row" style="grid-template-columns:minmax(180px,240px) auto">
+    <div><label>日期 <b>YYYY-MM-DD</b></label><input id="calDay" class="mono" placeholder="2026-11-18"></div>
+    <div style="display:flex;align-items:flex-end;gap:9px"><button type="button" onclick="checkCalendar()">查询</button></div>
+  </div>
+  <div id="calBox" class="hint" style="margin-top:10px">—</div>
+</section>
+
+<div class="safe">
+  <b>操作提醒</b>：手工触发会清掉该任务当日的去重锁并立即执行，可能覆盖当天已有结果；若任务处于真实执行档（<code>dry_run=0</code>），会真的抓数并写入本机库。
+  本页所有写操作都走同源 <code>/api/jobs/*</code>，不会碰到生产 8000 上的调度。定时任务默认关闭，需要以 <code>SCHEDULER_ENABLED=1</code> 启动服务。
+</div>
+
+<footer>
+  页面是静态文件，走已有 <code>/static</code> 挂载；输入输出与 <code>/api/jobs/status</code> · <code>/api/jobs</code> ·
+  <code>/api/jobs/runs</code> · <code>/api/jobs/calendar</code> 同一实例。显式 <code>?api=http://127.0.0.1:8100</code> 可指定后端，绝无固定端口兜底。<br>
+  这是运维工具，不是投资建议来源；手工触发前请确认目标实例与执行档位。
+</footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const inst = location.host || '静态预览';
+$('inst').textContent = inst;
+
+// 与 index.html 同一套规则：同源优先，静态预览必须显式 ?api=，不猜固定端口。
+const API_BASE = (() => {
+  const q = new URLSearchParams(location.search).get('api');
+  const raw = q || localStorage.getItem('astock_api_base') || '';
+  if (!raw) return '';
+  try {
+    const u = new URL(raw, location.href);
+    if (u.protocol === 'http:' || u.protocol === 'https:') {
+      if (q) localStorage.setItem('astock_api_base', u.origin);
+      return u.origin;
+    }
+  } catch (_) {}
+  return '';
+})();
+const apiSuffix = () => API_BASE ? ('?api=' + encodeURIComponent(API_BASE)) : '';
+document.querySelectorAll('header a').forEach(a => { a.href += apiSuffix(); });
+
+const FIXED_LABEL = {
+  eod_close: ['盘后 EOD', '快照 → 指标 → 评分 → 全景 → 解读'],
+  news_half_hour: ['资讯轮询', '整点 / 半点事实流'],
+  track_daily: ['日频跟踪', 'cad=daily 工作集'],
+  track_twice_weekly: ['双周跟踪', '周二 / 周四'],
+  track_weekly: ['周频跟踪', '每周五'],
+  track_quarterly: ['季频跟踪', '季度首日'],
+  track_event: ['事件巡检', '事件维度兜底'],
+};
+let EDITING = null;
+let DEFS = {};
+
+async function req(path, method, body) {
+  const r = await fetch(API_BASE + path, {
+    method: method || 'GET', cache: 'no-store',
+    headers: body !== undefined ? {'Content-Type':'application/json'} : undefined,
+    body: body !== undefined ? JSON.stringify(body) : undefined
+  });
+  let j = null;
+  try { j = await r.json(); } catch (_) {}
+  if (!r.ok) throw new Error((j && (j.detail || j.message)) || ('HTTP ' + r.status));
+  if (j && j.code !== undefined && j.code !== 0) throw new Error(j.detail || '返回格式异常');
+  return j && j.data;
+}
+async function safe(path) { try { return await req(path); } catch (e) { return {__error: e.message}; } }
+
+function flash(text, kind) {
+  $('alert').innerHTML = '<div class="msg' + (kind ? ' ' + kind : '') + '">' + text + '</div>';
+  $('alert').scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+function kv(label, value, sub) {
+  return '<div class="kv"><label>' + esc(label) + '</label><b>' + esc(value) + '</b><small>' + esc(sub || '') + '</small></div>';
+}
+
+function renderStatus(st) {
+  const bad = st.error || st.startup_error || st.__error;
+  const on = !!st.running && !bad;
+  $('schedDot').className = 'dot ' + (on ? 'ok' : 'warn');
+  $('schedText').textContent = bad ? ('调度异常：' + String(bad).slice(0, 60))
+    : (on ? ('调度运行中 · ' + (st.backend || 'unknown')) : '调度未启用 / 已停止');
+  if (st.__error) {
+    flash('读不到 <code>/api/jobs/status</code>：' + esc(st.__error) +
+      '。请用服务自身地址打开本页，或确认已设 <code>SCHEDULER_ENABLED=1</code>。', 'warn');
+  }
+}
+
+function renderOverview(st) {
+  const c = st.calendar || {};
+  $('overview').innerHTML = [
+    kv('调度后端', st.backend || '—', st.apscheduler_available ? 'APScheduler 可用' : '内建轮询'),
+    kv('固定 / 自定义', (st.fixed_jobs ?? '—') + ' / ' + (st.custom_jobs ?? '—'),
+       '已注册 ' + (st.registered ?? '—') + ' 个'),
+    kv('执行档位', st.dry_run ? 'DRY RUN' : 'REAL RUN',
+       st.dry_run ? '演练链路，不真正抓数' : '真实抓数并写库'),
+    kv('今日交易', c.is_trading_day ? '交易日' : '非交易日',
+       (c.date || '') + ' · ' + (c.session || '') + ' · 快照 ' + (c.snapshot_trade_date || '—'))
+  ].join('');
+}
+
+function renderJobs(st, defsResp) {
+  const list = st.jobs || [];
+  DEFS = Object.fromEntries(((defsResp && defsResp.defs) || []).map(d => [d.id, d]));
+  const hs = (defsResp && defsResp.handlers) || st.handlers || [];
+  $('f_job_type').innerHTML = hs.length
+    ? hs.map(h => '<option value="' + esc(h) + '">' + esc(h) + '</option>').join('')
+    : '<option value="">未读到处理器列表</option>';
+  $('jobsCount').textContent = '共 ' + list.length + ' 个';
+  if (!list.length) {
+    $('jobBox').innerHTML = '<div class="empty">' +
+      (st.__error ? '调度接口不可用。' : '当前没有可显示的定时任务。') + '</div>';
+    return;
+  }
+  $('jobBox').innerHTML = '<table><colgroup><col style="width:22%"><col style="width:10%">' +
+    '<col style="width:14%"><col style="width:9%"><col style="width:15%"><col style="width:10%">' +
+    '<col style="width:20%"></colgroup><thead><tr><th>任务</th><th>类型</th><th>cron</th>' +
+    '<th>状态</th><th>下次执行</th><th>上次成功</th><th style="text-align:right">操作</th></tr></thead><tbody>' +
+    list.map(j => {
+      const lab = FIXED_LABEL[j.id] || [j.id, j.job_type];
+      const d = DEFS[j.id] || {};
+      const tag = j.custom
+        ? '<span class="tag' + (j.enabled ? '' : ' off') + '">' + (j.enabled ? '自定义 · 启用' : '自定义 · 停用') + '</span>'
+        : '<span class="tag fixed">固定 · 只读</span>';
+      const ops = '<button class="mini" data-act="run" data-id="' + esc(j.id) + '">触发</button>' +
+        (j.custom
+          ? '<button class="mini" data-act="toggle" data-id="' + esc(j.id) + '">' + (j.enabled ? '停用' : '启用') + '</button>' +
+            '<button class="mini" data-act="edit" data-id="' + esc(j.id) + '">编辑</button>' +
+            '<button class="mini danger" data-act="del" data-id="' + esc(j.id) + '">删除</button>'
+          : '<span class="hint">由代码定义</span>');
+      return '<tr><td class="nm" title="' + esc(d.note || lab[1]) + '">' + esc(lab[0]) +
+        '<small>' + esc(j.id) + '</small></td>' +
+        '<td class="mut">' + esc(j.job_type) + '</td>' +
+        '<td class="mono">' + esc(j.cron) + '</td><td>' + tag + '</td>' +
+        '<td class="mono">' + esc(j.next_run_at || '—') + '</td>' +
+        '<td class="mono">' + esc(j.last_success || '—') + '</td>' +
+        '<td class="ops">' + ops + '</td></tr>';
+    }).join('') + '</tbody></table>';
+}
+
+function renderRuns(d) {
+  const rows = (d && d.runs) || (Array.isArray(d) ? d : []);
+  $('runsCount').textContent = '最近 ' + rows.length + ' 条';
+  if (!rows.length) { $('runBox').innerHTML = '<div class="empty">暂无运行记录。</div>'; return; }
+  $('runBox').innerHTML = '<table><colgroup><col style="width:16%"><col style="width:14%">' +
+    '<col style="width:10%"><col style="width:18%"><col style="width:18%"><col style="width:24%"></colgroup>' +
+    '<thead><tr><th>任务 ID</th><th>交易日 / 时间键</th><th>结果</th><th>开始</th><th>结束</th><th>详情</th></tr></thead><tbody>' +
+    rows.map(r => {
+      const cls = r.status === 'ok' ? '' : (r.status === 'error' ? ' err' : ' off');
+      const detail = String(r.detail || '—');
+      return '<tr><td class="nm">' + esc(r.job_type) + '</td><td class="mono">' + esc(r.trade_date || '—') + '</td>' +
+        '<td><span class="tag' + cls + '">' + esc(r.status || '—') + '</span></td>' +
+        '<td class="mut">' + esc(r.started_at || '—') + '</td><td class="mut">' + esc(r.finished_at || '—') + '</td>' +
+        '<td class="mono" title="' + esc(detail) + '">' + esc(detail.slice(0, 70)) + '</td></tr>';
+    }).join('') + '</tbody></table>';
+}
+
+async function loadAll() {
+  const [st, defs, runs] = await Promise.all([
+    safe('/api/jobs/status'), safe('/api/jobs'), safe('/api/jobs/runs?limit=50')
+  ]);
+  renderStatus(st);
+  renderOverview(st);
+  renderJobs(st, defs);
+  renderRuns(runs);
+}
+
+function resetForm() {
+  EDITING = null;
+  $('f_id').value = ''; $('f_id').disabled = false;
+  $('f_cron').value = ''; $('f_enabled').value = '1';
+  $('f_params').value = ''; $('f_note').value = '';
+  $('f_submit').textContent = '保存任务';
+  $('f_cancel').style.display = 'none';
+  $('editorTitle').textContent = '新增自定义任务';
+}
+
+function fillForm(d) {
+  EDITING = d.id;
+  $('f_id').value = d.id; $('f_id').disabled = true;
+  $('f_job_type').value = d.job_type;
+  $('f_cron').value = d.cron || '';
+  $('f_enabled').value = String(d.enabled ?? 1);
+  $('f_params').value = JSON.stringify(d.params || {});
+  $('f_note').value = d.note || '';
+  $('f_submit').textContent = '更新任务';
+  $('f_cancel').style.display = '';
+  $('editorTitle').textContent = '编辑自定义任务 · ' + d.id;
+  $('editorCard').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+$('f_cancel').addEventListener('click', resetForm);
+
+$('jobForm').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const id = $('f_id').value.trim();
+  const cron = $('f_cron').value.trim();
+  if (!id || !cron) { flash('任务 ID 与 cron 必填。', 'err'); return; }
+  let params = {};
+  try { params = JSON.parse($('f_params').value.trim() || '{}'); } catch (e) {
+    flash('params 不是合法 JSON：' + esc(e.message), 'err'); return;
+  }
+  if (!params || typeof params !== 'object' || Array.isArray(params)) {
+    flash('params 必须是 JSON 对象。', 'err'); return;
+  }
+  const payload = {id, job_type: $('f_job_type').value, cron,
+    params, enabled: Number($('f_enabled').value), note: $('f_note').value.trim()};
+  $('f_submit').disabled = true;
+  try {
+    if (EDITING) await req('/api/jobs/' + encodeURIComponent(EDITING), 'PATCH', payload);
+    else await req('/api/jobs', 'POST', payload);
+    flash('任务 <code>' + esc(id) + '</code> 已保存，调度器已即时更新。');
+    resetForm();
+    await loadAll();
+  } catch (e) {
+    flash('保存失败：' + esc(e.message), 'err');
+  } finally { $('f_submit').disabled = false; }
+});
+
+$('jobBox').addEventListener('click', async ev => {
+  const b = ev.target.closest('button[data-act]');
+  if (!b) return;
+  const id = b.dataset.id, act = b.dataset.act;
+  if (act === 'edit') {
+    if (DEFS[id]) fillForm(DEFS[id]);
+    else flash('读不到任务 <code>' + esc(id) + '</code> 的定义，无法编辑。', 'warn');
+    return;
+  }
+  if (act === 'del') {
+    if (!confirm('确认删除自定义任务「' + id + '」？\n只删除定义，已有运行记录会保留；不可撤销。')) return;
+    try {
+      await req('/api/jobs/' + encodeURIComponent(id), 'DELETE');
+      flash('已删除任务 <code>' + esc(id) + '</code>。', 'warn');
+      if (EDITING === id) resetForm();
+      await loadAll();
+    } catch (e) { flash('删除失败：' + esc(e.message), 'err'); }
+    return;
+  }
+  if (act === 'toggle') {
+    const d = DEFS[id];
+    if (!d) return;
+    const enabled = d.enabled ? 0 : 1;
+    if (!confirm('确认' + (enabled ? '启用' : '停用') + '任务「' + id + '」？')) return;
+    b.disabled = true;
+    try {
+      await req('/api/jobs/' + encodeURIComponent(id), 'PATCH', {enabled});
+      flash('任务 <code>' + esc(id) + '</code> 已' + (enabled ? '启用' : '停用') + '。');
+      await loadAll();
+    } catch (e) { flash('操作失败：' + esc(e.message), 'err'); }
+    finally { b.disabled = false; }
+    return;
+  }
+  if (act === 'run') {
+    if (!confirm('确认手工触发「' + id + '」？\n会清除当日去重锁并立即重跑，只作用于当前实例。')) return;
+    b.disabled = true;
+    try {
+      const d = await req('/api/jobs/' + encodeURIComponent(id) + '/run', 'POST', {});
+      const skipped = d && d.skipped;
+      flash('任务 <code>' + esc(id) + '</code> ' +
+        (skipped ? ('已跳过：' + esc(skipped)) :
+          ((d && d.ok) ? '触发成功' : '触发未成功：' + esc(d && (d.error || (d.result && d.result.error) || '未知原因')))) +
+        (d && d.key ? ' · 键 ' + esc(d.key) : ''), (d && d.ok) ? '' : 'warn');
+      await loadAll();
+    } catch (e) { flash('触发失败：' + esc(e.message), 'err'); }
+    finally { b.disabled = false; }
+  }
+});
+
+async function checkCalendar() {
+  const day = $('calDay').value.trim();
+  try {
+    const d = await req('/api/jobs/calendar' + (day ? ('?day=' + encodeURIComponent(day)) : ''));
+    $('calBox').innerHTML = '<span class="tag' + (d.is_trading_day ? '' : ' off') + '">' +
+      (d.is_trading_day ? '交易日' : '非交易日') + '</span> ' + esc(d.date) + ' · ' + esc(d.session) +
+      ' · 上一交易日 ' + esc(d.prev_trading_day) + ' · 下一交易日 ' + esc(d.next_trading_day) +
+      ' · 快照日 ' + esc(d.snapshot_trade_date || '—') + ' · 节假日 ' + esc(d.holidays_count) + ' 天';
+  } catch (e) { $('calBox').textContent = '查询失败：' + e.message; }
+}
+
+loadAll().then(checkCalendar);
+</script>
+</body>
+</html>

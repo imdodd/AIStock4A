@@ -1,0 +1,132 @@
+{
+  "$defs": {
+    "DigestRow": {
+      "additionalProperties": true,
+      "description": "tools.pregen.export() 产出的单只票摘要。字段远不止这些，全部靠 extra 保留。",
+      "properties": {
+        "code": {
+          "default": "",
+          "title": "Code",
+          "type": "string"
+        },
+        "name": {
+          "default": "",
+          "title": "Name",
+          "type": "string"
+        },
+        "chg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Chg"
+        },
+        "vol_ratio": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vol Ratio"
+        },
+        "tag": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tag"
+        },
+        "industry": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Industry"
+        },
+        "hist": {
+          "additionalProperties": true,
+          "title": "Hist",
+          "type": "object"
+        },
+        "flow": {
+          "additionalProperties": true,
+          "title": "Flow",
+          "type": "object"
+        },
+        "notices": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Notices",
+          "type": "array"
+        },
+        "news": {
+          "items": {
+            "type": "string"
+          },
+          "title": "News",
+          "type": "array"
+        },
+        "rule_causes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Rule Causes",
+          "type": "array"
+        },
+        "rule_risks": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Rule Risks",
+          "type": "array"
+        }
+      },
+      "title": "DigestRow",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "properties": {
+    "date": {
+      "title": "Date",
+      "type": "string"
+    },
+    "count": {
+      "default": 0,
+      "title": "Count",
+      "type": "integer"
+    },
+    "items": {
+      "items": {
+        "$ref": "#/$defs/DigestRow"
+      },
+      "title": "Items",
+      "type": "array"
+    }
+  },
+  "required": [
+    "date"
+  ],
+  "title": "DigestPack",
+  "type": "object"
+}

@@ -1,0 +1,68 @@
+# ---- 数据：真实持仓 / 行情快照 / 研究档案 / 跟踪方案，一律不入库 ----
+backend/data/*
+!backend/data/.gitkeep
+# 开箱样例：公开大市值股的空白样例持仓（仅让首屏有演示数据，用户在界面删除后填自己的）
+!backend/data/portfolio/
+backend/data/portfolio/*
+!backend/data/portfolio/holdings.json
+!backend/data/portfolio/watchlist.json
+# 真实数据实例目录（ASTOCK_DATA_DIR 指向它，含真实持仓与行情，永不入库）
+backend/data-live/
+
+# ---- 私有实现：APP_PROFILE=private 时本地加载，绝不发布 ----
+contrib/private/*
+!contrib/private/README.md
+
+# ---- 密钥与本地配置 ----
+.env
+.env.*
+!.env.example
+**/.secrets/
+*.secrets
+*.local.py
+# 运维页启动期生成的脱敏快照（按实例端口隔离，每次启动重建，不入库）
+frontend/ops-config*.json
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ---- 运行时产物 ----
+**/logs/
+**/tmp/
+**/.tmp/
+**/.tmp-*/
+*.log
+*.bak
+*.tmp
+reports/
+.tmp/
+
+# ---- 截图与调试页（历史教训：曾含真实持仓与自选清单）----
+*.png
+*.jpg
+*.jpeg
+frontend/test_*.html
+shot_*
+docs/preview*
+
+# ---- 本地代理、编辑器、系统 ----
+**/.workbuddy/
+_cp/
+_cpw/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 自检/运行产物不入库
+backend/data/portfolio/*.log
+backend/data/portfolio/stops.json
+backend/data/astock.db
+backend/data/cache/
+backend/data/profile/
+backend/data/snapshot/
+backend/data/tracking/

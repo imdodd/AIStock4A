@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Key 配置 · 股票跟踪分析平台</title>
+<script>
+  // 首屏先按本地缓存上色，随后由 fill() 用服务端配置校准。
+  try {
+    var __t = localStorage.getItem('astock_theme');
+    if (__t === 'light' || __t === 'dark') document.documentElement.dataset.theme = __t;
+  } catch (e) {}
+</script>
+<style>
+:root{
+  --bg:#0a0f1c; --card:#111a2c; --card2:#0e1727; --line:rgba(120,160,220,.16);
+  --txt:#e6edfb; --sub:#8fa2c4; --blue:#5aa9ff; --cyan:#45d6c8;
+  --violet:#a78bfa; --amber:#ffc069; --ok:#45d6c8; --warn:#ffc069; --err:#ff7a8a;
+}
+/* 浅色风格：与主界面同一套暖橙日间色（参考支付宝余额宝），共用 astock_theme 缓存键 */
+html[data-theme="light"]{
+  --bg:#f2ede6; --card:#ffffff; --card2:#faf7f3; --line:#e6ddd2;
+  --txt:#26221e; --sub:#7a726a; --blue:#d9550f; --cyan:#0b7a52;
+  --violet:#b6551a; --amber:#b26a00; --ok:#0b7a52; --warn:#b26a00; --err:#e0392b;
+  color-scheme:light;
+}
+html[data-theme="light"] body{background-image:none}
+html[data-theme="light"] input::placeholder{color:#a99e93}
+html[data-theme="light"] h1{border-bottom:0}
+html[data-theme="light"] button.primary{background:linear-gradient(135deg,#ec7240,#e05d20);color:#fff;border-color:#e05d20}
+html[data-theme="light"] button.primary:hover{color:#fff;border-color:#c94a10}
+html[data-theme="light"] .card h2::before{background:var(--blue)}
+html[data-theme="light"] .card{box-shadow:0 2px 12px rgba(120,86,52,.07)}
+html[data-theme="light"] .dot.ok{box-shadow:0 0 8px rgba(11,122,82,.45)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);
+  font:13px/1.55 "Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+  background-image:radial-gradient(900px 420px at 12% -8%,rgba(90,169,255,.10),transparent),
+                   radial-gradient(760px 380px at 92% 0%,rgba(167,139,250,.09),transparent);}
+.wrap{max-width:960px;margin:0 auto;padding:18px 20px 30px}
+header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+h1{font-size:18px;margin:0;letter-spacing:.4px;font-weight:650}
+h1 span{color:var(--violet)}
+.badge{font-size:11px;padding:3px 9px;border:1px solid var(--line);border-radius:20px;color:var(--sub);background:var(--card2)}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;background:var(--sub)}
+.dot.ok{background:var(--ok);box-shadow:0 0 8px rgba(69,214,200,.6)}
+.dot.warn{background:var(--warn)}
+.grow{flex:1}
+button{background:var(--card);color:var(--txt);border:1px solid var(--line);border-radius:7px;
+  padding:7px 14px;cursor:pointer;font-size:12px}
+button:hover{border-color:var(--blue);color:var(--blue)}
+button.primary{background:linear-gradient(135deg,rgba(90,169,255,.24),rgba(167,139,250,.22));
+  border-color:rgba(90,169,255,.5);font-weight:600;padding:9px 22px}
+button.primary:hover{color:#fff;border-color:var(--violet)}
+button:disabled{opacity:.5;cursor:not-allowed}
+a{color:var(--blue);text-decoration:none}
+.card{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:14px 16px;
+  margin-bottom:12px;box-shadow:0 6px 24px rgba(0,0,0,.22)}
+.card h2{font-size:12px;margin:0 0 3px;color:var(--txt);font-weight:650;letter-spacing:.6px;
+  display:flex;align-items:center;gap:8px}
+.card h2::before{content:"";width:3px;height:13px;border-radius:2px;background:var(--blue)}
+.card:nth-of-type(2) h2::before{background:var(--violet)}
+.card:nth-of-type(3) h2::before{background:var(--cyan)}
+.card .desc{color:var(--sub);font-size:11px;margin:0 0 12px}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:11px}
+label{display:block;font-size:11px;color:var(--sub);margin-bottom:4px}
+label b{color:var(--txt);font-weight:500}
+input,select{width:100%;background:var(--card2);color:var(--txt);border:1px solid var(--line);
+  border-radius:7px;padding:8px 10px;font-size:12px;font-family:inherit;outline:none}
+input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(90,169,255,.14)}
+input::placeholder{color:#5f7394}
+input.mono,select.mono{font-family:ui-monospace,Consolas,monospace;font-size:11px}
+.chip{display:inline-block;font-size:11px;padding:2px 8px;border-radius:5px;
+  background:rgba(69,214,200,.12);color:var(--ok);border:1px solid rgba(69,214,200,.28)}
+.chip.no{background:rgba(143,162,196,.10);color:var(--sub);border-color:var(--line)}
+.chip.warn{background:rgba(255,192,105,.12);color:var(--warn);border-color:rgba(255,192,105,.3)}
+.status{display:flex;align-items:center;gap:9px;flex-wrap:wrap;font-size:11px;color:var(--sub);
+  margin-bottom:11px;padding-bottom:10px;border-bottom:1px solid rgba(120,160,220,.09)}
+.actions{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-top:14px}
+.hint{font-size:11px;color:var(--sub);line-height:1.7}
+.msg{margin-top:11px;padding:9px 12px;border-radius:8px;font-size:12px;line-height:1.6;display:none;
+  border:1px solid rgba(69,214,200,.32);background:rgba(69,214,200,.08);color:var(--ok)}
+.msg.err{border-color:rgba(255,122,138,.38);background:rgba(255,122,138,.08);color:var(--err)}
+.msg.warn{border-color:rgba(255,192,105,.35);background:rgba(255,192,105,.08);color:var(--warn)}
+.safe{margin-top:14px;padding:11px 13px;border-radius:9px;font-size:11px;line-height:1.75;
+  border:1px solid rgba(255,192,105,.3);background:rgba(255,192,105,.06);color:var(--sub)}
+.safe b{color:var(--warn)}
+code{background:var(--card2);padding:1px 5px;border-radius:4px;color:var(--amber);font-size:11px}
+.clear{background:none;border:none;color:var(--sub);font-size:11px;padding:2px 4px;text-decoration:underline}
+.clear:hover{color:var(--err)}
+footer{margin-top:15px;color:var(--sub);font-size:11px;line-height:1.7;
+  border-top:1px solid var(--line);padding-top:11px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Key 配置 <span>/ SETTINGS</span></h1>
+  <span class="badge"><i class="dot" id="apiDot"></i><span id="apiText">检查中…</span></span>
+  <span class="badge">实例 <span id="inst">—</span></span>
+  <span class="grow"></span>
+  <a href="/static/jobs.html"><button>调度管理</button></a>
+  <a href="/static/ops.html"><button style="margin-left:6px">运行监控</button></a>
+  <a href="/"><button style="margin-left:6px">返回主界面</button></a>
+</header>
+
+<div id="alert"></div>
+
+<form id="form" autocomplete="off">
+  <section class="card">
+    <h2>AI 解读（OpenAI 兼容接口）</h2>
+    <p class="desc">用于盘后批量解读与页内追问。不填也能跑，会自动退到本地规则归因。</p>
+    <div class="status">
+      <span>当前状态</span><span class="chip no" id="llmChip">检查中…</span>
+      <span id="llmMask"></span><span id="llmSource"></span>
+      <button type="button" class="clear" onclick="clearKey('llm.api_key')">清除已存密钥</button>
+    </div>
+    <div class="row">
+      <div>
+        <label>服务商预设 <b>（自动填接口地址与模型）</b></label>
+        <select id="preset" class="mono" onchange="applyPreset()"></select>
+      </div>
+      <div>
+        <label>接口地址 <b>base_url</b></label>
+        <input id="llm_base_url" class="mono" placeholder="https://api.deepseek.com/v1">
+      </div>
+      <div>
+        <label>模型名 <b>model</b></label>
+        <input id="llm_model" class="mono" placeholder="deepseek-chat">
+      </div>
+      <div>
+        <label>密钥 <b>api_key</b>（留空 = 保持现有值，永不回显）</label>
+        <input id="llm_api_key" type="password" class="mono" autocomplete="new-password"
+               placeholder="未设置，粘贴后保存">
+      </div>
+      <div>
+        <label>采样温度 <b>temperature</b>（0 ~ 2）</label>
+        <input id="llm_temperature" type="number" step="0.1" min="0" max="2" class="mono" placeholder="0.4">
+      </div>
+    </div>
+    <div class="actions">
+      <button type="button" onclick="runTest('llm')">测试 LLM 连通性</button>
+      <span class="hint" id="llmTestHint"></span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>资讯联网检索</h2>
+    <p class="desc">默认 <code>none</code> 档只抓固定公开源、不需要任何 Key；需要更广的事实检索时才填。</p>
+    <div class="status">
+      <span>当前状态</span><span class="chip no" id="searchChip">检查中…</span>
+      <span id="searchMask"></span><span id="searchSource"></span>
+      <button type="button" class="clear" onclick="clearKey('search.api_key')">清除已存密钥</button>
+    </div>
+    <div class="row">
+      <div>
+        <label>检索档 <b>SEARCH_PROVIDER</b></label>
+        <select id="SEARCH_PROVIDER" class="mono"></select>
+      </div>
+      <div>
+        <label>检索服务 <b>backend</b></label>
+        <select id="search_backend" class="mono">
+          <option value="tavily">tavily</option>
+          <option value="serper">serper</option>
+          <option value="generic">generic（自定义接口）</option>
+        </select>
+      </div>
+      <div>
+        <label>检索密钥 <b>api_key</b>（留空 = 保持现有值）</label>
+        <input id="search_api_key" type="password" class="mono" autocomplete="new-password"
+               placeholder="未设置，粘贴后保存">
+      </div>
+      <div>
+        <label>自定义接口 <b>url</b>（generic 档用，含 {query} 占位）</label>
+        <input id="search_url" class="mono" placeholder="可留空">
+      </div>
+      <div>
+        <label>结果路径 <b>results_path</b></label>
+        <input id="search_results_path" class="mono" placeholder="results">
+      </div>
+      <div>
+        <label>单轮最多查询数 <b>max_queries</b></label>
+        <input id="search_max_queries" type="number" min="1" max="20" class="mono" placeholder="4">
+      </div>
+      <div>
+        <label>单次结果上限 <b>max_results</b></label>
+        <input id="search_max_results" type="number" min="1" max="20" class="mono" placeholder="5">
+      </div>
+    </div>
+    <div class="actions">
+      <button type="button" onclick="runTest('search')">测试检索连通性</button>
+      <span class="hint" id="searchTestHint"></span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>产出通道</h2>
+    <p class="desc">决定盘后批处理用哪一档 producer 生成解读；档位改动会同步到当前进程，无需重启。</p>
+    <div class="row">
+      <div>
+        <label>AI 解读通道 <b>PRODUCER</b></label>
+        <select id="PRODUCER" class="mono"></select>
+      </div>
+      <div>
+        <label>界面风格 <b>UI theme</b>（保存后主界面刷新生效）</label>
+        <select id="theme" class="mono">
+          <option value="dark">深色 · 默认</option>
+          <option value="light">浅色</option>
+        </select>
+      </div>
+      <div style="display:flex;align-items:flex-end;gap:9px">
+        <button type="submit" class="primary">保存配置</button>
+        <span class="hint">保存后即时生效</span>
+      </div>
+    </div>
+    <div class="msg" id="msg"></div>
+  </section>
+</form>
+
+<div class="safe">
+  <b>安全须知</b>：密钥只写入本机 <code>backend/data/.secrets/*.json</code>（已被 .gitignore 排除），
+  本页面与所有接口<b>永不回显明文</b>，只显示掩码；配置接口只接受 <code>127.0.0.1</code> 本机请求，
+  且只提供 POST 端点。<b>不要把密钥贴进聊天、截图或提交记录</b>；一旦泄露请立即到服务商后台轮换。
+  服务默认只监听 127.0.0.1，请勿把 <code>HOST</code> 改成 <code>0.0.0.0</code> 直接暴露公网。
+</div>
+
+<footer>
+  配置页是静态文件，走已有 <code>/static</code> 挂载；配置接口为
+  <code>POST /api/config/state</code> · <code>POST /api/config/save</code> ·
+  <code>POST /api/config/test</code>，另有一个只读的 <code>GET /api/ui/theme</code> 给主页面同步风格，
+  仅新增 POST 端点，GET 路由集合不变。<br>
+  设 <code>CONFIG_API_ENABLED=0</code> 可整体关闭配置能力；密钥文件也可用
+  <code>python -m tools.set_llm_key</code> 命令行维护。<br>
+  主界面右上角齿轮入口可在密钥配置、调度任务管理、运行监控之间切换；
+  从静态预览打开时 <code>?api=</code> 会自动透传，不会回退到任何固定端口。
+</footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let STATE = null;
+$('inst').textContent = location.host || '静态预览';
+
+// 与 index.html 同一套规则：同源优先，静态预览必须显式 ?api=，不猜固定端口。
+const API_BASE = (() => {
+  const q = new URLSearchParams(location.search).get('api');
+  const raw = q || localStorage.getItem('astock_api_base') || '';
+  if (!raw) return '';
+  try {
+    const u = new URL(raw, location.href);
+    if (u.protocol === 'http:' || u.protocol === 'https:') {
+      if (q) localStorage.setItem('astock_api_base', u.origin);
+      return u.origin;
+    }
+  } catch (_) {}
+  return '';
+})();
+const apiSuffix = () => API_BASE ? ('?api=' + encodeURIComponent(API_BASE)) : '';
+document.querySelectorAll('header a[href^="/static/"]').forEach(a => { a.href += apiSuffix(); });
+
+async function post(path, body) {
+  const r = await fetch(API_BASE + path, {
+    method:'POST', cache:'no-store',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body || {})
+  });
+  let j = null;
+  try { j = await r.json(); } catch (_) {}
+  if (!r.ok) throw new Error((j && (j.detail || j.message)) || ('HTTP ' + r.status));
+  if (!j || j.code !== 0) throw new Error((j && (j.detail || j.message)) || '返回格式异常');
+  return j.data;
+}
+
+function showMsg(text, kind) {
+  const m = $('msg');
+  m.className = 'msg' + (kind ? ' ' + kind : '');
+  m.innerHTML = text;
+  m.style.display = 'block';
+}
+
+function chip(id, configured, source) {
+  const el = $(id);
+  el.className = 'chip' + (configured ? '' : ' no');
+  el.textContent = configured ? ('已配 · ' + source) : '未配';
+}
+
+function fill(s) {
+  STATE = s;
+  $('apiDot').className = 'dot ok';
+  $('apiText').textContent = '配置接口已启用（仅本机）';
+  chip('llmChip', s.llm.configured, s.llm.source);
+  chip('searchChip', s.search.configured, s.search.source);
+  $('llmMask').textContent = s.llm.masked ? ('掩码 ' + s.llm.masked) : '';
+  $('searchMask').textContent = s.search.masked ? ('掩码 ' + s.search.masked) : '';
+  $('llmSource').textContent = s.llm.source === 'both'
+    ? '（环境变量与密钥文件都有值，文件优先）' : '';
+  $('searchSource').textContent = s.search.source === 'both'
+    ? '（环境变量优先级更高）' : '';
+
+  const pre = $('preset');
+  pre.innerHTML = (s.presets || []).map(p =>
+    '<option value="' + esc(p.id) + '">' + esc(p.name) + '</option>').join('');
+  const matched = (s.presets || []).find(p => p.base_url === s.llm.base_url && p.model === s.llm.model);
+  pre.value = matched ? matched.id : 'custom';
+
+  $('llm_base_url').value = s.llm.base_url || '';
+  $('llm_model').value = s.llm.model || '';
+  $('llm_api_key').value = '';
+  $('llm_api_key').placeholder = s.llm.masked ? ('已保存：' + s.llm.masked + '（留空不改）') : '未设置，粘贴后保存';
+  $('llm_temperature').value = s.llm.temperature ?? 0.4;
+
+  const sp = $('SEARCH_PROVIDER');
+  sp.innerHTML = (s.choices.SEARCH_PROVIDER || []).map(v =>
+    '<option value="' + esc(v) + '">' + esc(v) + '</option>').join('');
+  sp.value = s.switches.SEARCH_PROVIDER || 'none';
+  const pr = $('PRODUCER');
+  pr.innerHTML = (s.choices.PRODUCER || []).map(v =>
+    '<option value="' + esc(v) + '">' + esc(v) + '</option>').join('');
+  pr.value = s.switches.PRODUCER || 'llm_direct';
+
+  $('search_backend').value = s.search.backend || 'tavily';
+  $('search_api_key').value = '';
+  $('search_api_key').placeholder = s.search.masked
+    ? ('已保存：' + s.search.masked + '（留空不改）') : '未设置，粘贴后保存';
+  $('search_url').value = s.search.url || '';
+  $('search_results_path').value = s.search.results_path || 'results';
+  $('search_max_queries').value = s.search.max_queries ?? 4;
+  $('search_max_results').value = s.search.max_results ?? 5;
+
+  const theme = (s.ui && s.ui.theme) || 'dark';
+  $('theme').value = theme;
+  document.documentElement.dataset.theme = theme;
+  try { localStorage.setItem('astock_theme', theme); } catch (_) {}
+}
+
+function applyPreset() {
+  if (!STATE) return;
+  const p = (STATE.presets || []).find(x => x.id === $('preset').value);
+  if (!p || p.id === 'custom') return;
+  $('llm_base_url').value = p.base_url;
+  $('llm_model').value = p.model;
+}
+
+async function loadState() {
+  try {
+    fill(await post('/api/config/state'));
+  } catch (e) {
+    $('apiDot').className = 'dot warn';
+    $('apiText').textContent = '配置接口不可用';
+    $('alert').innerHTML = '<div class="msg warn" style="display:block">无法读取配置状态：' +
+      esc(e.message) + '。<br/>请确认：① 服务是较新版本；② 通过服务自己的地址打开（同源）；' +
+      '③ <code>CONFIG_API_ENABLED</code> 未设为 0；④ <code>HOST</code> 仍是 127.0.0.1。</div>';
+  }
+}
+
+$('form').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const btn = $('form').querySelector('button[type=submit]');
+  btn.disabled = true;
+  showMsg('正在保存…', '');
+  const payload = {
+    llm: {
+      base_url: $('llm_base_url').value.trim(),
+      model: $('llm_model').value.trim(),
+      api_key: $('llm_api_key').value.trim(),
+      temperature: $('llm_temperature').value
+    },
+    search: {
+      backend: $('search_backend').value,
+      api_key: $('search_api_key').value.trim(),
+      url: $('search_url').value.trim(),
+      results_path: $('search_results_path').value.trim(),
+      max_queries: $('search_max_queries').value,
+      max_results: $('search_max_results').value
+    },
+    switches: {
+      PRODUCER: $('PRODUCER').value,
+      SEARCH_PROVIDER: $('SEARCH_PROVIDER').value
+    },
+    ui: {
+      theme: $('theme').value
+    }
+  };
+  try {
+    const d = await post('/api/config/save', payload);
+    fill(d.state);
+    $('llm_api_key').value = '';
+    $('search_api_key').value = '';
+    const changed = (d.changed || []).length ? esc(d.changed.join('、')) : '无变更';
+    const themeTip = (d.changed || []).includes('ui.theme')
+      ? '<br/>界面风格已切换；主界面刷新后同步。' : '';
+    showMsg('<b>已保存。</b>变更：' + changed + '。<br/>' + esc(d.hint || '') + themeTip, '');
+  } catch (e) {
+    showMsg('<b>保存失败：</b>' + esc(e.message), 'err');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+async function clearKey(item) {
+  const who = item.startsWith('llm') ? 'AI 解读' : '资讯检索';
+  if (!confirm('确认清除「' + who + '」已保存的密钥？清除后该通道会退到本地规则，且不可撤销。')) return;
+  try {
+    const d = await post('/api/config/save', {clear: [item]});
+    fill(d.state);
+    showMsg('已清除 ' + esc(item) + ' 的密钥，配置即时生效。', 'warn');
+  } catch (e) {
+    showMsg('<b>清除失败：</b>' + esc(e.message), 'err');
+  }
+}
+
+async function runTest(target) {
+  const hint = $(target + 'TestHint');
+  hint.textContent = '正在测试（最多 20 秒）…';
+  try {
+    const d = await post('/api/config/test', {target});
+    hint.textContent = d.ok
+      ? ('✓ 连通' + (d.model ? ' · ' + d.model : '') + (d.reply ? ' · 回复「' + d.reply + '」' : '')
+         + (d.count !== undefined ? ' · 取回 ' + d.count + ' 条' : ''))
+      : ('✗ 未通过：' + (d.reason || '未知原因'));
+    hint.style.color = d.ok ? 'var(--ok)' : 'var(--warn)';
+  } catch (e) {
+    hint.textContent = '✗ 测试请求失败：' + e.message;
+    hint.style.color = 'var(--err)';
+  }
+}
+
+loadState();
+</script>
+</body>
+</html>
