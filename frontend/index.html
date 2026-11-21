@@ -2721,7 +2721,7 @@
     ];
     $('#sentimentCards').innerHTML = items.map(x => `
       <div class="item"><div class="k">${x.k}</div><div class="v ${x.cls}">${x.v}</div><div class="sub">${x.sub}</div></div>`).join('');
-    $('#sentHint').textContent = `EOD · ${s.date || m.date} · ${s.source || ''}`;
+    $('#sentHint').textContent = `EOD · ${s.date || m.date}`;
 
     const total = m.coverage ? m.coverage.sectors_total : 124;
     $('#distBars').innerHTML = m.distribution.map(d => `
