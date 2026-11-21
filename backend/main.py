@@ -43,7 +43,8 @@ import tracking
 import storage_runtime
 storage_runtime.install_from_env()
 
-from data_paths import DATA_DIR
+import data_paths
+from data_paths import DATA_DIR, safe_slug
 HERE = os.path.dirname(os.path.abspath(__file__))
 SNAP = os.path.join(DATA_DIR, "snapshot")
 CHARTS = os.path.join(SNAP, "charts")
@@ -90,13 +91,21 @@ def _code_state() -> dict:
 
 app = FastAPI(title="股票跟踪分析平台 API", version="0.1.0-M1")
 
-# 允许从静态预览（file:// 或其它端口）直接打开 frontend/index.html 时跨域取数
+# 跨域只放行本机自访问（前端由本服务托管，页面与 API 同源，正常使用不依赖 CORS）。
+# 之前的 allow_origins=["*"] 会让任意恶意网页跨域读写本机接口（含持仓增删与
+# 密钥配置联动），必须收紧。个别特殊部署需要额外来源时用 CORS_ALLOW_ORIGINS 配置。
+_CORS_ORIGINS = [x.strip() for x in (os.environ.get("CORS_ALLOW_ORIGINS") or "").split(",")
+                 if x.strip()] or [
+    "http://127.0.0.1:8000", "http://localhost:8000",
+    "http://127.0.0.1:8100", "http://localhost:8100",
+    "http://127.0.0.1:8101", "http://localhost:8101",
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_CORS_ORIGINS,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 
@@ -106,6 +115,13 @@ def _load(name: str) -> Any:
         return None
     with open(p, encoding="utf-8") as f:
         return json.load(f)
+
+
+# 路径分量校验失败（../、斜杠等穿越输入）→ 统一转成 400，不暴露 500 堆栈
+@app.exception_handler(data_paths.BadParam)
+async def _bad_param_handler(request, exc):
+    return JSONResponse(status_code=400,
+                        content={"code": 1, "message": str(exc)})
 
 
 def _meta() -> dict:
@@ -799,7 +815,11 @@ def _resolve_name(code: str) -> str | None:
 
 def _chart_data(code: str, refresh: bool = False) -> dict | None:
     """读图表缓存；缓存落后于最新交易日或缺失时现场重算"""
-    p = os.path.join(CHARTS, f"{code}.json")
+    try:
+        safe_slug(code, "股票代码")     # 拒绝 ..、斜杠等路径穿越输入
+    except ValueError:
+        return None
+    p = os.path.join(CHARTS, f"{safe_slug(code)}.json")
     if os.path.exists(p) and not refresh:
         try:
             with open(p, encoding="utf-8") as f:
@@ -884,6 +904,7 @@ def _holdings_view() -> list[dict]:
 def _build_chart(code: str) -> dict | None:
     """现场抓 K 线 → 算阶段 → 产出图表 payload，并写缓存"""
     try:
+        safe_slug(code, "股票代码")     # 写缓存文件名同样要过穿越校验
         bars = _src().fetch_kline([code], limit=420).get(code)
         if not bars:
             return None
@@ -928,6 +949,10 @@ def _find_member_name(code: str) -> str | None:
 
 
 def _load_members(code: str) -> dict | None:
+    try:
+        safe_slug(code, "板块代码")
+    except ValueError:
+        return None
     p = os.path.join(MEMBERS, f"{code}.json")
     if not os.path.exists(p):
         return None
@@ -940,6 +965,10 @@ def _load_members(code: str) -> dict | None:
 
 def _build_members(code: str) -> dict | None:
     """该行业还没有快照时现场生成（约 2 秒：取成分股 + 并发抓 K 线 + 算阶段）"""
+    try:
+        safe_slug(code, "板块代码")
+    except ValueError:
+        return None
     sectors = {s["code"]: s for s in (_load("sectors.json") or [])}
     meta = sectors.get(code)
     if not meta:

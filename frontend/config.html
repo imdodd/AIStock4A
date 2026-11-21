@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -204,8 +204,8 @@ footer{margin-top:15px;color:var(--sub);font-size:11px;line-height:1.7;
       <div>
         <label>界面风格 <b>UI theme</b>（保存后主界面刷新生效）</label>
         <select id="theme" class="mono">
-          <option value="dark">深色 · 默认</option>
-          <option value="light">浅色</option>
+          <option value="light">浅色 · 默认</option>
+          <option value="dark">深色</option>
         </select>
       </div>
       <div style="display:flex;align-items:flex-end;gap:9px">
@@ -329,7 +329,7 @@ function fill(s) {
   $('search_max_queries').value = s.search.max_queries ?? 4;
   $('search_max_results').value = s.search.max_results ?? 5;
 
-  const theme = (s.ui && s.ui.theme) || 'dark';
+  const theme = (s.ui && s.ui.theme) || 'light';
   $('theme').value = theme;
   document.documentElement.dataset.theme = theme;
   try { localStorage.setItem('astock_theme', theme); } catch (_) {}

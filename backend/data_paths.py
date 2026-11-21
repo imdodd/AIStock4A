@@ -14,10 +14,32 @@ pregen、资讯等）都改用同一份目录。于是一套代码可以同时�
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_DATA_DIR = os.path.join(HERE, "data")
+
+# 单个路径分量的合法形态：字母/数字/下划线开头，可含 . _ -，长度 1~64。
+# 用于校验从 HTTP 请求进入的「股票代码 / 日期 / 板块码」等文件名参数，
+# 从根上拒绝路径穿越（../、绝对路径、斜杠、隐藏文件都进不来）。
+_SLUG_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.\-]{0,63}$")
+
+
+class BadParam(ValueError):
+    """路径分量参数不合法（可被上层转成 400 响应，不与内部错误混淆）。"""
+
+
+def safe_slug(name, what: str = "参数") -> str:
+    """校验一个将拼进文件路径的请求参数，不合法直接抛 BadParam。
+
+    合法示例：sh600519 / bj920001 / 2026-11-20 / bk0475。
+    拒绝：../、a/b、a\\b、.secrets、以 . 开头的隐藏名、空串。
+    """
+    s = str(name or "").strip()
+    if not s or not _SLUG_RE.match(s) or ".." in s or s.startswith("."):
+        raise BadParam(f"{what} 不合法：{s[:40]!r}")
+    return s
 
 
 def data_dir() -> str:
@@ -46,4 +68,5 @@ def describe() -> dict:
     }
 
 
-__all__ = ["DATA_DIR", "DATA_PATH", "data_dir", "sub", "describe", "DEFAULT_DATA_DIR"]
+__all__ = ["DATA_DIR", "DATA_PATH", "data_dir", "sub", "describe",
+           "DEFAULT_DATA_DIR", "safe_slug"]

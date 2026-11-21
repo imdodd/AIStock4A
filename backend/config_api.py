@@ -85,6 +85,23 @@ SECRET_FIELDS = {"api_key"}
 MAX_LEN = 512
 _CTRL = re.compile(r"[\x00-\x1f\x7f]")
 
+# ---------- URL 域名白名单（防「改 base_url 保留密钥」把密钥送出去） ----------
+# 场景：本机服务无登录，任何能访问配置页的人（含恶意网页借浏览器本机身份发起
+# 的请求）都可能改 base_url 为攻击者服务器再触发连通性测试，服务端就会带着
+# Bearer 密钥请求新地址 → 密钥外送。因此 URL 只允许已知服务商域名（可经环境
+# 变量扩展），以及本机自建推理服务（http://127.0.0.1 / localhost）。
+_KNOWN_LLM_HOSTS = {
+    "api.deepseek.com", "dashscope.aliyuncs.com", "api.openai.com",
+    "api.moonshot.cn", "open.bigmodel.cn", "api.siliconflow.cn",
+    "ark.cn-beijing.volces.com", "api.lingyiwanwu.com", "api.baichuan-ai.com",
+    "api.minimax.chat", "api.lkeap.cloud", "generativelanguage.googleapis.com",
+    "api.anthropic.com", "api.x.ai",
+}
+_KNOWN_SEARCH_HOSTS = {
+    "api.tavily.com", "api.searchapi.io", "google.serper.dev",
+    "api.bing.microsoft.com", "api.search.brave.com", "serpapi.com",
+}
+
 
 def _ok(data: Any) -> dict:
     return {"code": 0, "data": data}
@@ -213,7 +230,7 @@ def _ui_state() -> dict:
         import ui_config
         return ui_config.describe()
     except Exception:
-        return {"theme": "dark", "choices": ["dark", "light"]}
+        return {"theme": "light", "choices": ["dark", "light"]}
 
 
 def v_default(key: str) -> str:
@@ -227,6 +244,38 @@ def _check_local(request: Request) -> None:
     host = (request.client.host if request.client else "") or ""
     if host not in _LOCAL_HOSTS:
         raise HTTPException(403, "配置接口只允许本机访问（127.0.0.1 / localhost）")
+
+
+def _extra_hosts(env_key: str) -> set[str]:
+    """环境变量追加的白名单域名（逗号分隔），给自建网关/代理留口子。"""
+    raw = (os.environ.get(env_key) or "")
+    return {h.strip().lower() for h in raw.split(",") if h.strip()}
+
+
+def _check_url(field: str, value: str) -> None:
+    """URL 字段（llm.base_url / search.url）域名白名单校验。
+
+    放行：https + 已知服务商域名；本机推理服务（127.0.0.1/localhost，http/https）。
+    其它一律拒绝，可用 LLM_BASE_URL_EXTRA / SEARCH_URL_EXTRA 追加。
+    """
+    if not value:
+        return
+    try:
+        from urllib.parse import urlsplit
+        u = urlsplit(value)
+        host = (u.hostname or "").lower()
+    except Exception:
+        host = ""
+    local = host in {"127.0.0.1", "localhost", "::1"} or host.endswith(".local")
+    if local and u.scheme in ("http", "https"):
+        return
+    if u.scheme != "https":
+        raise HTTPException(400, f"{field} 仅允许 https:// 地址（本机服务可用 http://127.0.0.1）")
+    allow = ((_KNOWN_LLM_HOSTS if field == "base_url" else _KNOWN_SEARCH_HOSTS)
+             | _extra_hosts("LLM_BASE_URL_EXTRA" if field == "base_url" else "SEARCH_URL_EXTRA"))
+    if host not in allow:
+        raise HTTPException(400, f"{field} 的域名 {host or '(无法解析)'} 不在白名单内；"
+                                 f"如使用自建网关，可用 LLM_BASE_URL_EXTRA / SEARCH_URL_EXTRA 添加")
 
 
 def _clean_value(field: str, value: Any) -> Any:
@@ -297,6 +346,8 @@ def save(request: Request, payload: dict = Body(...)):
         v = _clean_value(field, raw)
         if field == "api_key" and v == "":      # 空 = 保持原值
             continue
+        if field == "base_url":
+            _check_url("base_url", v)           # 白名单：防止改地址带走密钥
         llm[field] = v
         changed.append("llm." + field)
     for field, raw in search_in.items():
@@ -305,6 +356,8 @@ def save(request: Request, payload: dict = Body(...)):
         v = _clean_value(field, raw)
         if field == "api_key" and v == "":
             continue
+        if field == "url":
+            _check_url("url", v)                # 同上：检索密钥也只发给白名单地址
         search[field] = v
         changed.append("search." + field)
 

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="light">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -142,7 +142,6 @@
   html[data-theme="light"] .sfd-op:hover,
   html[data-theme="light"] .chart-modes button:hover,
   html[data-theme="light"] .spot:hover,
-  html[data-theme="light"] .chartwrap:hover .fs-btn,
   html[data-theme="light"] .ctxbar .back:hover,
   html[data-theme="light"] .nc-tag:hover,
   html[data-theme="light"] .ai-chips button:hover,
@@ -162,16 +161,14 @@
   html[data-theme="light"] .news-card.ni-bear{border-left-color:var(--down)}
   html[data-theme="light"] .news-card.ni-flat{border-left-color:var(--muted)}
   html[data-theme="light"] .news-card.ni-mix{border-left-color:var(--s3)}
-  /* 图表右上控件：深色胶囊在白图上吞字，改成白底深字 + 橙色激活态 */
+  /* 图表上方工具条：白底深字 + 橙色激活态（在文档流中常驻，不再悬浮遮图） */
   html[data-theme="light"] .fs-btn,
   html[data-theme="light"] .chart-modes{background:rgba(255,255,255,.96);border-color:var(--line);
-    box-shadow:0 2px 10px rgba(120,86,52,.12);opacity:.92}
-  html[data-theme="light"] .chartwrap:hover .fs-btn,
-  html[data-theme="light"] .chartwrap:hover .chart-modes{opacity:1}
+    box-shadow:0 2px 10px rgba(120,86,52,.12)}
   html[data-theme="light"] .fs-btn,
   html[data-theme="light"] .chart-modes button{color:#5f5248}
-  html[data-theme="light"] .chartwrap:hover .fs-btn,
-  html[data-theme="light"] .chartwrap:hover .chart-modes button:hover{color:#c2520a}
+  html[data-theme="light"] .fs-btn:hover,
+  html[data-theme="light"] .chart-modes button:hover{color:#c2520a}
   html[data-theme="light"] .fs-btn:hover,
   html[data-theme="light"] .chart-modes button.active{background:rgba(255,107,26,.12);color:#c2520a}
   html[data-theme="light"] .chart-modes button.active{font-weight:600}
@@ -230,9 +227,9 @@
   body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 "Segoe UI","Microsoft YaHei",system-ui,sans-serif;
     display:flex;flex-direction:column;min-height:100vh}
   #app{flex:1;display:flex;flex-direction:column;min-width:0}
-  .topbar{display:flex;align-items:center;gap:24px;padding:12px 24px;border-bottom:1px solid var(--line);background:var(--topbar);position:sticky;top:0;z-index:10}
+  .topbar{display:flex;align-items:center;gap:24px;padding:12px 24px;border-bottom:1px solid var(--line);background:var(--topbar);position:sticky;top:0;z-index:50}
   .brand{font-size:16px;font-weight:700;letter-spacing:.5px}
-  .brand .tag{margin-left:8px;font-size:11px;font-weight:400;color:var(--muted);border:1px solid var(--line);border-radius:10px;padding:1px 8px}
+  .brand .tag{margin-left:8px;font-size:10px;font-weight:400;color:var(--muted);border:1px solid var(--line);border-radius:10px;padding:1px 8px}
   .tabs{display:flex;gap:6px}
   .tabs button{background:transparent;border:1px solid transparent;color:var(--muted);padding:6px 18px;border-radius:8px;cursor:pointer;font-size:14px}
   .tabs button:hover{color:var(--text);background:var(--panel2)}
@@ -352,7 +349,8 @@
   .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
   .panel + .panel{margin-top:12px}
   .panel h3{margin:0 0 12px;font-size:14px;font-weight:600;color:var(--soft);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-  .panel h3 .hint{font-size:11px;font-weight:400;color:var(--muted)}
+  .hint{font-size:10px;font-weight:400;color:var(--muted)}
+  .panel h3 .hint{font-size:10px;font-weight:400;color:var(--muted)}
   .card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
   .card .name{color:var(--muted);font-size:12px;display:flex;justify-content:space-between;align-items:center}
   .card .price{font-size:22px;font-weight:700;margin:6px 0 2px;font-variant-numeric:tabular-nums}
@@ -383,6 +381,27 @@
   html[data-theme="light"] .pos-mini.s2{background:rgba(224,57,43,.09)}
   html[data-theme="light"] .pos-mini.s3{background:rgba(224,138,0,.11)}
   html[data-theme="light"] .pos-mini.s4{background:rgba(18,153,107,.10)}
+  /* 悬浮四级仓位提示：列出 S1–S4 全部建议，当前阶段高亮 */
+  .pos-mini{position:relative}
+  .pos-tip{display:none;position:absolute;top:calc(100% + 7px);right:0;z-index:70;width:252px;
+    padding:8px 10px;border-radius:8px;background:var(--panel);border:1px solid var(--line);
+    box-shadow:0 12px 32px rgba(0,0,0,.35);text-align:left;cursor:default;color:var(--text)}
+  .pos-mini:hover .pos-tip{display:block}
+  .pos-tip-row{display:flex;align-items:center;gap:6px;padding:3px 7px;border-radius:5px;
+    font-size:11px;color:var(--muted)}
+  .pos-tip-row .st{font-style:normal;flex:none;width:26px;font-size:10px;font-weight:700}
+  .pos-tip-row b{flex:none;width:58px;font-variant-numeric:tabular-nums;font-size:11px}
+  .pos-tip-row span{flex:1;font-size:10px}
+  .pos-tip-row em{font-style:normal;flex:none;font-size:9px;font-weight:700;
+    padding:0 6px;border-radius:8px;border:1px solid currentColor;color:var(--text)}
+  .pos-tip-row.s1 .st,.pos-tip-row.s1 b{color:var(--s1)}
+  .pos-tip-row.s2 .st,.pos-tip-row.s2 b{color:var(--s2)}
+  .pos-tip-row.s3 .st,.pos-tip-row.s3 b{color:var(--s3)}
+  .pos-tip-row.s4 .st,.pos-tip-row.s4 b{color:var(--s4)}
+  .pos-tip-row.cur{background:rgba(127,127,127,.15);font-weight:600;color:var(--text)}
+  .pos-tip-row.cur span{color:var(--text)}
+  .pos-tip-note{margin-top:5px;padding-top:5px;border-top:1px dashed var(--dashline);
+    color:var(--muted);font-size:10px;line-height:1.5}
   .idx-pos-summary{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:10px;padding:5px 12px;border-radius:8px;border:1px solid;font-size:11px}
   .idx-pos-summary .lead{color:var(--muted)}
   .idx-pos-summary .big{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums}
@@ -607,31 +626,29 @@
   /* 全屏退出瞬间 zrender 的 root 还留着视口宽的 inline px；裁在容器里，
      既不让它视觉溢出到页面右侧，也不影响 ECharts 内部的 tooltip 定位。 */
   .chartwrap > .chart{display:block;overflow:hidden}
-  .fs-btn{position:absolute;top:2px;right:2px;z-index:6;display:inline-flex;align-items:center;gap:4px;
+  /* 周期切换/全屏按钮所在工具条：放在图表上方文档流里，不再悬浮遮挡画布上的买卖点 */
+  .chart-toolbar{display:flex;justify-content:flex-start;align-items:center;gap:6px;
+    /* 左侧 46px 与 K 线 grid.left 对齐，让工具条和蜡烛区左边缘齐平 */
+    padding:0 2px 2px 46px}
+  .fs-btn{display:inline-flex;align-items:center;gap:4px;
     background:rgba(26,34,48,.86);border:1px solid var(--line);color:var(--muted);border-radius:7px;
-    padding:2px 9px;font-size:11px;line-height:18px;cursor:pointer;opacity:.45;transition:opacity .15s,color .15s,border-color .15s}
-  .chartwrap:hover .fs-btn{opacity:1;color:#b9d3ff;border-color:rgba(77,141,255,.45)}
+    padding:2px 9px;font-size:11px;line-height:18px;cursor:pointer;transition:opacity .15s,color .15s,border-color .15s}
   .fs-btn:hover{background:rgba(77,141,255,.22);color:#fff}
   .fs-title{display:none}
   .chartwrap:fullscreen,.chartwrap:-webkit-full-screen,.chartwrap.is-fs{background:var(--panel);
     padding:10px 16px 4px;display:flex;flex-direction:column;gap:6px;width:100%;height:100%;overflow:hidden}
   .chartwrap.is-fs{position:fixed;inset:0;z-index:999;border:0;border-radius:0}
   .chartwrap:fullscreen .fs-title,.chartwrap:-webkit-full-screen .fs-title,.chartwrap.is-fs .fs-title{display:flex;align-items:center;gap:10px;
-    font-size:14px;font-weight:600;color:var(--soft);padding-right:110px;min-height:22px}
-  .chartwrap:fullscreen .fs-title .hint,.chartwrap:-webkit-full-screen .fs-title .hint,.chartwrap.is-fs .fs-title .hint{font-size:11px;font-weight:400;color:var(--muted)}
+    font-size:14px;font-weight:600;color:var(--soft);min-height:22px}
+  .chartwrap:fullscreen .fs-title .hint,.chartwrap:-webkit-full-screen .fs-title .hint,.chartwrap.is-fs .fs-title .hint{font-size:10px;font-weight:400;color:var(--muted)}
   .chartwrap:fullscreen > .chart,.chartwrap:-webkit-full-screen > .chart,.chartwrap.is-fs > .chart{flex:1 1 auto;height:auto!important;min-height:0}
-  .chartwrap:fullscreen .fs-btn,.chartwrap:-webkit-full-screen .fs-btn,.chartwrap.is-fs .fs-btn{top:10px;right:16px;opacity:1}
-  /* 日K / 分时 切换（贴在实例右上，与全屏按钮同排） */
-  .chart-modes{position:absolute;top:2px;right:82px;z-index:6;display:flex;gap:2px;
-    padding:1px;border-radius:8px;background:rgba(26,34,48,.86);border:1px solid var(--line);
-    opacity:.45;transition:opacity .15s}
-  .chartwrap:hover .chart-modes{opacity:1}
+  /* 日K / 分时 切换（在图表上方工具条内，与全屏按钮同排） */
+  .chart-modes{display:flex;gap:2px;
+    padding:1px;border-radius:8px;background:rgba(26,34,48,.86);border:1px solid var(--line)}
   .chart-modes button{font-size:10px;line-height:16px;padding:1px 8px;border-radius:6px;cursor:pointer;
     background:transparent;border:0;color:var(--muted);transition:color .15s,background .15s}
   .chart-modes button:hover{color:#b9d3ff}
   .chart-modes button.active{background:rgba(77,141,255,.22);color:#cfe0ff}
-  .chartwrap:fullscreen .chart-modes,.chartwrap:-webkit-full-screen .chart-modes,
-  .chartwrap.is-fs .chart-modes{top:10px;right:104px;opacity:1}
   /* ===== 日K 下方的当日分时子图 ===== */
   .chart-sub{margin-top:6px;padding-top:2px;border-top:1px solid var(--line)}
   .chart-sub[hidden]{display:none}
@@ -698,6 +715,13 @@
   .ctxbar .stats{display:flex;gap:18px;margin-left:auto;flex-wrap:wrap}
   .ctxbar .stat{font-size:11px;color:var(--muted);text-align:right;line-height:1.5}
   .ctxbar .stat b{display:block;font-size:16px;color:#dbe5f5;font-variant-numeric:tabular-nums}
+  /* 浅色下上下文条与其他页面卡片统一：白卡 + 暖边 + 深墨字 + 橙色交互 */
+  html[data-theme="light"] .ctxbar{background:var(--panel);border-color:var(--line);
+    box-shadow:0 2px 12px rgba(120,86,52,.07)}
+  html[data-theme="light"] .ctxbar .ctx-name{color:var(--text)}
+  html[data-theme="light"] .ctxbar .stat b{color:var(--text)}
+  html[data-theme="light"] .ctxbar .back:hover{color:#c2520a;border-color:rgba(255,107,26,.5);
+    background:rgba(255,107,26,.09)}
   .spot{color:var(--softblue);cursor:pointer;border-bottom:1px dashed rgba(138,182,255,.5)}
   .spot:hover{color:#b9d3ff}
   .mini-btn{background:rgba(77,141,255,.12);border:1px solid rgba(77,141,255,.35);color:var(--softblue);
@@ -1149,7 +1173,7 @@
   /* 左栏是 1fr，标题里的摘要必须能收缩/换行，否则会顶进右侧止损面板 */
   #hdTrackingWrap{min-width:0;overflow:hidden}
   #trackTimeline .flow-title{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;min-width:0}
-  #trackTimeline .flow-title .hint{font-size:11px;font-weight:400;color:var(--muted);
+  #trackTimeline .flow-title .hint{font-size:10px;font-weight:400;color:var(--muted);
     flex:1 1 220px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .tl2-top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin:2px 0 12px}
   .tl2-fs{flex:none}
@@ -1272,8 +1296,8 @@
 
     <!-- ================= 大盘 ================= -->
     <section id="tab-market" class="tab active">
-      <div class="grid-4" id="indexCards"></div>
       <div id="indexPosSummary"></div>
+      <div class="grid-4" id="indexCards"></div>
       <div class="two-col market-two">
         <div class="mk-left">
           <div class="panel">
@@ -1666,6 +1690,15 @@
     4: { pct:'0-10%',   lo:0,  hi:10,  act:'空仓 / 回避为主', tip:'下跌段，本金安全优先，等待底部拐点',     cls:'s4' },
   };
   const stagePos = idx => STAGE_POS[idx && idx.stage] || STAGE_POS[4];
+  // 悬浮提示：四级建议仓位全列出，当前阶段行高亮 + 标「当前」，底部附当前阶段说明
+  const posTipHtml = cur => {
+    const st = cur || 4;
+    return Object.keys(STAGE_POS).map(n => {
+      const p = STAGE_POS[n], on = +n === st;
+      return `<div class="pos-tip-row ${p.cls}${on ? ' cur' : ''}">
+        <i class="st">S${n}</i><b>${p.pct}</b><span>${p.act}</span>${on ? '<em>当前</em>' : ''}</div>`;
+    }).join('') + `<div class="pos-tip-note">${STAGE_POS[st].tip}</div>`;
+  };
   // 图表颜色：ECharts 画在 canvas 上，CSS 变量管不到，必须按当前主题取色。
   // 深色沿用原值；浅色把轴字/网格压成可读的深灰、涨跌压成更饱和的红绿。
   const _lightChart = () => document.documentElement.dataset.theme === 'light';
@@ -1770,7 +1803,7 @@
         } catch (_) {}
       };
       window.__astockApplyTheme = apply;   // 启动时用服务端配置校准也走这里
-      apply(document.documentElement.dataset.theme || 'dark');
+      apply(document.documentElement.dataset.theme || 'light');
       themeRow.querySelectorAll('[data-theme-value]').forEach(b => {
         b.addEventListener('click', async e => {
           e.stopPropagation();
@@ -1819,7 +1852,7 @@
   (async () => {
     try {
       const t = await api('/api/ui/theme');
-      const theme = (t && t.theme) || 'dark';
+      const theme = (t && t.theme) || 'light';
       if (window.__astockApplyTheme) window.__astockApplyTheme(theme);
       else {
         document.documentElement.dataset.theme = theme;
@@ -2663,8 +2696,9 @@
       <div class="card">
         <div class="name">
           <span class="nm-l">${i.name}${badge(i.stage, i.sub, i.sub_confirmed)}</span>
-          <span class="pos-mini ${pos.cls}" title="温斯坦建议仓位 ${pos.pct}·${pos.act} — ${pos.tip}">
+          <span class="pos-mini ${pos.cls}">
             <b>${pos.pct}</b><span>${pos.act.split(' / ')[0]}</span>
+            <span class="pos-tip">${posTipHtml(i.stage)}</span>
           </span>
         </div>
         <div class="price ${upDown(i.chg)}">${fmt(i.price)}</div>
@@ -3929,7 +3963,7 @@
       <div>
         <div class="ctx-name">${d.name} <span style="font-size:12px;color:var(--muted);font-weight:400">${d.code}</span></div>
         <div class="ctx-meta">行业当前 ${badge(d.sector_stage, d.sector_sub)} · 指标截至 ${d.as_of || '—'}
-          ${d.live_as_of ? ` · <span style="color:#5fd99a">⚡ 价格已实时校准 ${d.live_as_of.slice(5)}</span>` : ' · 价格为快照口径'}
+          ${d.live_as_of ? ` · <span style="color:var(--down)">⚡ 价格已实时校准 ${d.live_as_of.slice(5)}</span>` : ' · 价格为快照口径'}
           · 已按「Stage ${d.sector_stage}」筛选</div>
         ${otherCount > 0 && leader ? `<div style="font-size:11px;margin-top:3px;color:var(--softblue)">
           <button id="ctxOther" class="mini-btn" style="font-size:10px;padding:1px 8px">另有 ${otherCount} 只非本阶段</button>
@@ -5850,24 +5884,28 @@
   function infoReportCard(p) {
     const r = p.reports || {};
     const items = (r.items || []).slice(0, 4);
-    const dist = r.rating_dist ? Object.entries(r.rating_dist).map(([k, v]) => `${k} ${v}`).join(' · ') : '—';
-    return `<div class="icard"><h5>券商研报 <span class="cnt">近 ${r.window_months || 6} 个月 ${r.total || 0} 篇</span></h5>
+    // 研报数据来自外部接口（东财等），所有字符串字段必须转义后再进 innerHTML；
+    // 链接只允许 http(s)（含协议相对 //），防 javascript: 伪协议
+    const safeUrl = u => (typeof u === 'string' && /^(https?:\/\/|\/\/)/i.test(u.trim())) ? he(u.trim()) : '';
+    const dist = r.rating_dist ? Object.entries(r.rating_dist).map(([k, v]) => `${he(String(k))} ${he(String(v))}`).join(' · ') : '—';
+    return `<div class="icard"><h5>券商研报 <span class="cnt">近 ${he(String(r.window_months || 6))} 个月 ${he(String(r.total || 0))} 篇</span></h5>
       <div class="kv"><span>评级分布</span><b>${dist}</b></div>
       <div class="kv"><span>一致 EPS(今年)</span><b>${fmt(r.eps_consensus)}</b></div>
-      <div class="kv"><span>目标价均值</span><b>${r.target_avg ? fmt(r.target_avg) + ` (${r.target_n} 家)` : '研报未给出'}</b></div>
+      <div class="kv"><span>目标价均值</span><b>${r.target_avg ? fmt(r.target_avg) + ` (${he(String(r.target_n))} 家)` : '研报未给出'}</b></div>
       <div style="margin-top:8px">${items.map(it => {
-        const t = it.title || '—';
-        const title = it.url
-          ? `<a class="rep-link" href="${it.url}" target="_blank" rel="noopener noreferrer"
+        const t = he(it.title || '—');
+        const url = safeUrl(it.url);
+        const title = url
+          ? `<a class="rep-link" href="${url}" target="_blank" rel="noopener noreferrer"
                title="在新标签页打开研报详情（东方财富）">${t}<span class="rep-out">↗</span></a>`
           : `<div class="rep-title">${t}</div>`;
-        const pdf = it.pdf
-          ? `<a class="rep-pdf" href="${it.pdf}" target="_blank" rel="noopener noreferrer"
+        const pdf = safeUrl(it.pdf)
+          ? `<a class="rep-pdf" href="${safeUrl(it.pdf)}" target="_blank" rel="noopener noreferrer"
                title="打开研报全文 PDF">PDF 全文</a>` : '';
         return `<div class="rep-item">
           ${title}
-          <div class="rep-meta"><span>${it.org}</span><span>${it.date}</span>
-            <span>${it.rating || '—'}</span>${it.eps_this_year ? `<span>EPS ${fmt(it.eps_this_year)}</span>` : ''}
+          <div class="rep-meta"><span>${he(it.org || '')}</span><span>${he(it.date || '')}</span>
+            <span>${he(it.rating || '—')}</span>${it.eps_this_year ? `<span>EPS ${fmt(it.eps_this_year)}</span>` : ''}
             ${pdf}</div>
         </div>`;
       }).join('') || '<div class="empty">近半年无个股研报</div>'}
@@ -7521,7 +7559,11 @@
       for (let anc = wrap.parentElement; anc && anc !== document.body; anc = anc.parentElement) {
         anc.classList.add('has-fs-chart');
       }
+      // 工具条（周期切换 + 全屏）放在图表上方文档流里，不再悬浮遮挡 K 线上的买卖点
+      const toolbar = document.createElement('div');
+      toolbar.className = 'chart-toolbar';
       wrap.appendChild(title);
+      wrap.appendChild(toolbar);
       wrap.appendChild(host);
       // 周期切换（日K/周/月/年）+ 分时（仅个股图位）
       if (PERIOD_HOSTS.includes(cfg.id)) {
@@ -7543,7 +7585,7 @@
             setPeriod(cfg.id, b.dataset.p);
           }
         }));
-        wrap.appendChild(modes);
+        toolbar.appendChild(modes);
         // 日K 下方的当日分时子图（默认隐藏，随手可开关）
         const sub = document.createElement('div');
         sub.className = 'chart-sub';
@@ -7551,7 +7593,7 @@
         sub.innerHTML = '<div class="chart-sub-head"></div><div class="chart-sub-body"></div>';
         wrap.appendChild(sub);
       }
-      wrap.appendChild(btn);
+      toolbar.appendChild(btn);
       wrap.__fsCfg = cfg;
       btn.addEventListener('click', e => {
         e.preventDefault(); e.stopPropagation();

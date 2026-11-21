@@ -197,6 +197,11 @@ def load(date: str | None = None) -> dict | None:
         if not ds:
             return None
         date = ds[0]
+    from data_paths import safe_slug
+    try:
+        safe_slug(date, "日期")            # 拒绝 ..、斜杠等路径穿越输入
+    except ValueError:
+        return None
     f = DATA / f"{date}.json"
     if not f.exists():
         return None

@@ -286,8 +286,14 @@ def judge(day: str, items: list[dict], cfg: dict | None = None,
         return None, {"ok": False, "skip": False, "reason": "LLM 输出不是合法 JSON，本轮不写入"}
 
     raw["date"] = day
+    # 数字白名单纳入本轮检索语料：候选是搜索真实返回的，其 snippet 里的数字
+    # 不算模型编造；只认 sources[].snippet 摘录会误杀摘片段漏掉的真实数字。
+    num_ctx = [{"title": str(x.get("title") or ""),
+                "snippet": str(x.get("snippet") or x.get("summary") or "")}
+               for x in items if isinstance(x, dict)]
     try:
-        patch, rejected = validate_patch(raw, sector_index, require_sources=True)
+        patch, rejected = validate_patch(raw, sector_index, require_sources=True,
+                                         number_context=num_ctx)
     except Exception as e:
         return None, {"ok": False, "skip": False,
                       "reason": f"契约校验失败：{type(e).__name__}: {str(e)[:160]}"}

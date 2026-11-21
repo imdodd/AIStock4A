@@ -355,7 +355,9 @@ def sector_of(code: str) -> tuple[str, str]:
 
 # ---------------------------------------------------------------- 存储
 def _dir(code: str) -> str:
-    return os.path.join(DIR, code)
+    # code 会拼进文件路径且可能来自 HTTP 请求，必须拒绝 ..、斜杠等穿越输入
+    from data_paths import safe_slug
+    return os.path.join(DIR, safe_slug(code, "股票代码"))
 
 
 def _meta_path(code: str) -> str:
@@ -363,7 +365,10 @@ def _meta_path(code: str) -> str:
 
 
 def load(code: str) -> dict | None:
-    p = _meta_path(code)
+    try:
+        p = _meta_path(code)
+    except Exception:            # 含路径穿越输入 → 视作「未跟踪」
+        return None
     if not os.path.exists(p):
         return None
     try:
@@ -813,7 +818,9 @@ def periods_dir_text(code: str) -> str:
     ``ASTOCK_DATA_DIR``（实际是 backend/data-live）之后这段提示词就指空了，
     定时任务照跑但写不进时间轴。路径统一从 DIR 推，不再手写。
     """
-    return os.path.join(DIR, code, "periods").replace(os.sep, "/")
+    # code 同样可能来自请求侧，落盘提示词里的路径也要过穿越校验
+    from data_paths import safe_slug
+    return os.path.join(DIR, safe_slug(code, "股票代码"), "periods").replace(os.sep, "/")
 
 
 def build_prompt(plan: dict) -> str:

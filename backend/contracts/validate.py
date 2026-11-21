@@ -200,7 +200,8 @@ def validate_brief(brief: dict, digest_row: dict) -> ValidationResult:
 
 # ---------------------------------------------------------------- 资讯 patch
 def validate_news_item(item: dict, sectors_index: dict | None = None,
-                       require_sources: bool = True) -> ValidationResult:
+                       require_sources: bool = True,
+                       number_context: Iterable[dict] | None = None) -> ValidationResult:
     try:
         normalized = NewsItem.model_validate(item).model_dump()
     except ValidationError as e:
@@ -245,9 +246,13 @@ def validate_news_item(item: dict, sectors_index: dict | None = None,
     judgment = [normalized.get("impact_note"), normalized.get("logic")]
     for group in ("sectors", "stocks"):
         judgment += [x.get("note") for x in (normalized.get(group) or [])]
-    # 证据只能来自检索产物 sources[]：绝不能拿正在被校验的 summary 自证，
-    # 否则「在 summary 里编一个 88888 亿」会自己核对通过，防编数形同虚设。
-    reasons += check_numbers([t for t in texts if t], {}, srcs)
+    # 证据白名单 = sources[] 摘录 + number_context（本轮检索语料全文）。
+    # 只看摘录会把 LLM 摘片段时漏掉的真实数字误判成编数（实测一轮候选全灭）：
+    # 语料里的数字是搜索真实返回的，不来自模型脑补，纳入白名单不算放松防幻觉——
+    # 凭空造一个语料里也没有的数依然会被拒。仍绝不拿被校验文本自证。
+    reasons += check_numbers([t for t in texts if t], {},
+                             list(srcs) + [c for c in (number_context or [])
+                                           if isinstance(c, dict)])
     reasons += check_compliance([t for t in judgment if t],
                                 "low" if normalized.get("confidence") == "低"
                                 else "medium")
@@ -255,7 +260,8 @@ def validate_news_item(item: dict, sectors_index: dict | None = None,
 
 
 def validate_patch(patch: dict, sectors_index: dict | None = None,
-                   require_sources: bool = True) -> tuple[dict, list[dict]]:
+                   require_sources: bool = True,
+                   number_context: Iterable[dict] | None = None) -> tuple[dict, list[dict]]:
     """逐条校验；失败的整条跳过并给出 rejected_reason，绝不污染日文件。"""
     if not isinstance(patch, dict):
         raise ContractError("news_patch 顶层必须是对象")
@@ -274,7 +280,7 @@ def validate_patch(patch: dict, sectors_index: dict | None = None,
     kept, rejected = [], []
     for raw in raw_items:
         res = validate_news_item(raw if isinstance(raw, dict) else {},
-                                 sectors_index, require_sources)
+                                 sectors_index, require_sources, number_context)
         if res.ok:
             kept.append(res.normalized)
         else:

@@ -1,15 +1,34 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>调度任务管理 · 股票跟踪分析平台</title>
+<script>
+  // 首屏先用本地缓存上色（与 index.html 共用 astock_theme 键），随后用服务端配置校准。
+  try {
+    var __t = localStorage.getItem('astock_theme');
+    if (__t === 'light' || __t === 'dark') document.documentElement.dataset.theme = __t;
+  } catch (e) {}
+</script>
 <style>
 :root{
   --bg:#0a0f1c; --card:#111a2c; --card2:#0e1727; --line:rgba(120,160,220,.16);
   --txt:#e6edfb; --sub:#8fa2c4; --blue:#5aa9ff; --cyan:#45d6c8;
   --violet:#a78bfa; --amber:#ffc069; --ok:#45d6c8; --warn:#ffc069; --err:#ff7a8a;
 }
+/* 浅色：与主界面/配置页同一套暖橙日间色，跟随主页主题 */
+html[data-theme="light"]{
+  --bg:#f2ede6; --card:#ffffff; --card2:#faf7f3; --line:#e6ddd2;
+  --txt:#26221e; --sub:#7a726a; --blue:#d9550f; --cyan:#0b7a52;
+  --violet:#b6551a; --amber:#b26a00; --ok:#0b7a52; --warn:#b26a00; --err:#e0392b;
+  color-scheme:light;
+}
+html[data-theme="light"] input::placeholder{color:#a99e93}
+html[data-theme="light"] body{background-image:none}
+html[data-theme="light"] .card{box-shadow:0 2px 12px rgba(120,86,52,.07)}
+html[data-theme="light"] button.primary{background:linear-gradient(135deg,#ec7240,#e05d20);color:#fff;border-color:#e05d20}
+html[data-theme="light"] button.primary:hover{border-color:#c94a10}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--txt);
   font:13px/1.55 "Segoe UI","Microsoft YaHei",system-ui,sans-serif;
@@ -182,6 +201,19 @@ const API_BASE = (() => {
 })();
 const apiSuffix = () => API_BASE ? ('?api=' + encodeURIComponent(API_BASE)) : '';
 document.querySelectorAll('header a').forEach(a => { a.href += apiSuffix(); });
+
+// 主题跟随主界面：首屏已按缓存上色，这里再用服务端配置校准（老后端无此接口则沿用缓存）。
+(async () => {
+  try {
+    const r = await fetch(API_BASE + '/api/ui/theme', {cache: 'no-store'});
+    const j = await r.json();
+    const t = j && j.data && j.data.theme;
+    if (t === 'light' || t === 'dark') {
+      document.documentElement.dataset.theme = t;
+      try { localStorage.setItem('astock_theme', t); } catch (_) {}
+    }
+  } catch (_) {}
+})();
 
 const FIXED_LABEL = {
   eod_close: ['盘后 EOD', '快照 → 指标 → 评分 → 全景 → 解读'],

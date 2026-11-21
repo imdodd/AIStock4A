@@ -271,8 +271,25 @@ def search(day: str, cfg: dict | None = None, dry_run: bool = False) -> dict:
 
     patch["date"] = day
     sector_index = {s["code"]: s["name"] for s in sectors}
+    # 数字白名单纳入本轮检索语料全文：搜索真实返回的数字不算编造，
+    # 只认 sources[].snippet 摘录会把摘片段漏掉的真实数字误杀（实测拒绝率过高）。
+    num_ctx = [{"title": str(s.get("title") or ""),
+                "snippet": str(s.get("snippet") or "")}
+               for s in info.get("raw_sources") or [] if isinstance(s, dict)]
+    # 当日已入库新闻（全部过过契约）的标题与摘要也进白名单：指数点位、涨跌幅、
+    # 成交额这类市场数字会在多轮间重复出现，多轮互相印证，不算编数。
     try:
-        kept_patch, rejected = validate_patch(patch, sector_index, require_sources=True)
+        import news as news_store
+        stored = news_store.load(day) or {}
+        num_ctx += [{"title": str(x.get("title") or ""),
+                     "snippet": str(x.get("summary") or "")}
+                    for x in (stored.get("items") or []) if isinstance(x, dict)]
+    except Exception:
+        pass
+    try:
+        kept_patch, rejected = validate_patch(patch, sector_index,
+                                              require_sources=True,
+                                              number_context=num_ctx)
     except Exception as e:
         return {"ok": False, "skip": False, "raw_file": raw_path,
                 "reason": f"契约校验失败：{type(e).__name__}: {str(e)[:160]}",

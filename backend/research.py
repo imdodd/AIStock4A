@@ -306,16 +306,22 @@ def _stable_hash(ev: dict) -> str:
 
 
 # ---------------------------------------------------------------- 状态 / 落盘
+def _safe(code: str) -> str:
+    """code 会拼进档案文件名且可能来自 HTTP 请求，拒绝 ..、斜杠等穿越输入。"""
+    from data_paths import safe_slug
+    return safe_slug(code, "股票代码")
+
+
 def _meta_path(code: str) -> str:
-    return os.path.join(DIR, f"{code}.meta.json")
+    return os.path.join(DIR, f"{_safe(code)}.meta.json")
 
 
 def _md_path(code: str) -> str:
-    return os.path.join(DIR, f"{code}.md")
+    return os.path.join(DIR, f"{_safe(code)}.md")
 
 
 def _dep_path(code: str) -> str:
-    return os.path.join(DIR, f"{code}.dep.json")
+    return os.path.join(DIR, f"{_safe(code)}.dep.json")
 
 
 def _atomic(path: str, text: str):
@@ -634,7 +640,7 @@ def _archive(code: str):
     old = _md_path(code)
     if not os.path.exists(old):
         return
-    d = os.path.join(VER, code)
+    d = os.path.join(VER, _safe(code))
     os.makedirs(d, exist_ok=True)
     day = (_load_meta(code).get("generated_at") or datetime.now().isoformat())[:10]
     _atomic(os.path.join(d, f"{day}.md"), open(old, encoding="utf-8").read())

@@ -1,4 +1,6 @@
-"""界面风格配置：深色 / 浅色，落在数据目录的 ui.json。
+"""界面风格配置：浅色 / 深色，落在数据目录的 ui.json。
+
+浅色为默认主题；ui.json 缺失或值非法时回落到 DEFAULT。
 
 为什么不放 localStorage：配置页是全局设置的入口，换浏览器/换设备应该一致；
 localStorage 只用来在首屏提前上色、避免闪一下白，真正以服务端为准。
@@ -15,7 +17,7 @@ from data_paths import DATA_DIR
 
 FILE = os.path.join(DATA_DIR, "ui.json")
 CHOICES = ("dark", "light")
-DEFAULT = "dark"
+DEFAULT = "light"
 
 
 def get_theme() -> str:

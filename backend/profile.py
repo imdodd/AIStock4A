@@ -445,7 +445,9 @@ def peers(code: str, limit: int = 5) -> dict:
 
 # ------------------------------------------------------------------ 合并 + 缓存
 def _cache_path(code: str) -> str:
-    return os.path.join(DIR, f"{code}.json")
+    # code 可能来自 HTTP 路径参数，拒绝 ..、斜杠等路径穿越输入
+    from data_paths import safe_slug
+    return os.path.join(DIR, f"{safe_slug(code, '股票代码')}.json")
 
 
 def profile(code: str, refresh: bool = False) -> dict:
