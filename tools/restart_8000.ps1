@@ -1,4 +1,4 @@
-# Restart the astock-v2 backend on port 8000 and verify the new endpoints.
+# Restart the AIStock4A backend on port 8000 and verify the new endpoints.
 #
 # Two modes, auto-detected:
 #   1) SERVICE mode (default since the 2026-11-20 cutover): 8000 is owned by the
@@ -10,7 +10,7 @@
 #      holding the port and start a fresh uvicorn ourselves.
 #
 # Usage (must be an ADMIN PowerShell):
-#   powershell -ExecutionPolicy Bypass -File D:\code\astock-v2\tools\restart_8000.ps1
+#   powershell -ExecutionPolicy Bypass -File D:\code\AIStock4A\tools\restart_8000.ps1
 #   ... -DryRun     just report what would happen
 #   ... -Yes        skip the interactive confirmation (unattended runs)
 #   ... -Mode Nssm  force a mode: Nssm | Standalone | Auto (default)

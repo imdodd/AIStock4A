@@ -1,4 +1,4 @@
--- astock-v2 存储层 DDL（SQLite 方言）
+-- AIStock4A 存储层 DDL（SQLite 方言）
 --
 -- 设计口径：
 --   1) 只把「用户手写 / 不可重建 / 需要事务」的资产入库；raw/ snapshot/ cases/
