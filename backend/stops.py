@@ -192,6 +192,14 @@ def recompute(force: bool = False, save: bool = True) -> dict:
     out = _load_json(OUT_PATH, {})
     today = None
     items, history = {}, out.get("history") or {}
+    # 交易日兜底：全新安装时部分持仓还没有 K 线缓存（_chart 返回 None），
+    # today 会一直是 None，导致写进 history 的条目 date=null，前端 x.date.slice() 崩。
+    # 用上一次成功的交易日 / 系统日期兜底，保证每条轨迹都有可渲染的日期。
+    fallback_date = out.get("date") or datetime.now().strftime("%Y-%m-%d")
+    # 清洗历史里已存在的无日期条目（老数据兼容）
+    for _code in list(history):
+        history[_code] = [x for x in (history[_code] or [])
+                          if isinstance(x, dict) and x.get("date")]
 
     for it in holdings:
         code = it.get("code")
@@ -204,7 +212,8 @@ def recompute(force: bool = False, save: bool = True) -> dict:
         if r:
             items[code] = r
             h = history.setdefault(code, [])
-            entry = {"date": today, "stop": r["stop"], "close": r["close"],
+            entry_date = today or fallback_date
+            entry = {"date": entry_date, "stop": r["stop"], "close": r["close"],
                      "rule": r["rule"], "status": r["status"]}
             if h and h[-1].get("date") == today:
                 # 同一天重算（比如盘后补了成本价）：替换当天那条，不要再追加一行
@@ -215,7 +224,7 @@ def recompute(force: bool = False, save: bool = True) -> dict:
             history[code] = h[-HISTORY_KEEP:]
 
     data = {
-        "date": today,
+        "date": today or fallback_date,
         "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "items": items,
         "history": history,

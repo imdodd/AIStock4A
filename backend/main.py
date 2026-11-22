@@ -727,6 +727,15 @@ def chart(code: str, refresh: int = 0, period: str = "day"):
     快照里已有的标的直接读文件；行业下钻点到的成分股没有预生成文件，
     这里改用公开行情接口现场抓 K 线并计算（约 0.3 秒），结果落盘缓存。
     """
+    # 板块指数（pt 开头）没有个股日 K，腾讯源只回 1 根，算不出阶段序列。
+    # 有些前端路径会拿板块代码请求本接口，直接 404 会让前端拿到 null 再 .slice() 崩。
+    # 这里返回结构完整的空图，前端能安全渲染「该板块暂无 K 线」而不抛异常。
+    if str(code).lower().startswith("pt"):
+        empty = dict(code=code, name=_name_of(code) or code,
+                     dates=[], bars=[], volumes=[], pivot_line=[],
+                     ma30=[], ma60=[], ma120=[], ma250=[], bands=[],
+                     pivots=[], signals=[], last=None)
+        return {"code": 0, "data": empty, "meta": _meta()}
     if period != "day":
         from engines.periods import build as build_period
         d = build_period(code, period, name=_name_of(code))
