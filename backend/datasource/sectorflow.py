@@ -33,6 +33,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 import time
 import urllib.request
 
@@ -60,15 +61,28 @@ _BREAK: dict = {"until": 0.0, "why": "", "hits": 0}
 # ---------------------------------------------------------------- 基础工具
 
 def _get(url: str, timeout: int = 8, retry: int = 1, headers: dict | None = None) -> dict:
+    hdrs = headers or UA
     last = None
     for i in range(retry + 1):
         try:
-            req = urllib.request.Request(url, headers=headers or UA)
+            req = urllib.request.Request(url, headers=hdrs)
             with urllib.request.urlopen(req, timeout=timeout) as r:
                 return json.loads(r.read().decode("utf-8", "replace"))
         except Exception as e:  # noqa: BLE001
             last = e
             time.sleep(0.4 * (i + 1))
+    # urllib 全部失败后回落 curl：实测存在「curl 通、urllib 被 RemoteDisconnected」的环境
+    # （TLS/HTTP 栈特征差异）。urllib 成功时完全不走这里，零开销、零行为变化。
+    try:
+        cmd = ["curl", "-sS", "--max-time", str(max(5, timeout))]
+        for k, v in hdrs.items():
+            cmd += ["-H", f"{k}: {v}"]
+        cmd.append(url)
+        p = subprocess.run(cmd, capture_output=True, timeout=max(12, timeout + 4))
+        if p.returncode == 0 and p.stdout:
+            return json.loads(p.stdout.decode("utf-8", "replace"))
+    except Exception as e:  # noqa: BLE001
+        last = e
     raise last  # type: ignore[misc]
 
 
