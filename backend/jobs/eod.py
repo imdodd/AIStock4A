@@ -114,6 +114,22 @@ def main(argv=None) -> int:
     log("=" * 66, fh)
     log("EOD 管道开始", fh)
 
+    # ⓪ 板块骨架自愈：仓库自带静态种子，网络可用时每周从线上申万列表刷新一次
+    #    代码/名称；种子缺失或从未在线刷新过则立即重建，保证 ① 抓取能把 124 个
+    #    申万二级行业纳入。本步失败不阻断主流程（② 已有缺文件容错）。
+    meta_path = os.path.join(DATA, "raw", "sectors_meta.json")
+    stamp_path = os.path.join(DATA, "cache", "sectors_meta_refreshed.json")
+    stale = (not os.path.exists(meta_path)) or (not os.path.exists(stamp_path))
+    if not stale:
+        try:
+            stale = (datetime.now() - datetime.fromtimestamp(os.path.getmtime(stamp_path))).days >= 7
+        except Exception:
+            stale = True
+    if stale:
+        run([sys.executable, "-m", "tools.rebuild_sectors_meta"], fh, "⓪ 重建申万二级板块骨架")
+    else:
+        log("○ 申万板块骨架 7 天内已刷新，跳过", fh)
+
     fetch_ok = True
     if skip_fetch:
         log("○ 跳过抓取（--skip-fetch）", fh)
