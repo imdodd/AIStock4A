@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>A股跟踪分析平台</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23111827'/%3E%3Cpath d='M6 21l6-7 5 4 9-10' fill='none' stroke='%23ef4444' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+<!-- 提前发起 ECharts 下载，与 HTML 解析/其余资源并行；同源脚本不加 crossorigin，避免与下方 script 重复请求 -->
+<link rel="preload" href="/static/echarts.min.js" as="script" />
 <script src="/static/echarts.min.js"></script>
 <script>
   // 首屏先用本地缓存上色，避免刷新时闪一下错主题；随后由主脚本用服务端配置校准。
