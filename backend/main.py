@@ -727,10 +727,23 @@ def chart(code: str, refresh: int = 0, period: str = "day"):
     快照里已有的标的直接读文件；行业下钻点到的成分股没有预生成文件，
     这里改用公开行情接口现场抓 K 线并计算（约 0.3 秒），结果落盘缓存。
     """
-    # 板块指数（pt 开头）没有个股日 K，腾讯源只回 1 根，算不出阶段序列。
-    # 有些前端路径会拿板块代码请求本接口，直接 404 会让前端拿到 null 再 .slice() 崩。
-    # 这里返回结构完整的空图，前端能安全渲染「该板块暂无 K 线」而不抛异常。
+    # 板块指数（pt 开头）：K 线由 EOD 从东财 BK 源补齐后写入 klines.json，
+    # 再由 build_snapshot 生成 charts/pt*.json。这里优先读该缓存并正常返回，
+    # 前端点板块才能出图。只有缓存确实不存在/无数据时才回落空图，
+    # 避免前端拿到 null 再 .slice() 崩；绝不现场走腾讯 pt 源（只回 1 根）。
     if str(code).lower().startswith("pt"):
+        try:
+            p = os.path.join(CHARTS, f"{safe_slug(code)}.json")
+            if os.path.exists(p):
+                with open(p, encoding="utf-8") as f:
+                    d = json.load(f)
+                if d and d.get("dates"):
+                    name = d.get("name")
+                    if not name or name == code:
+                        d["name"] = _name_of(code) or name or code
+                    return {"code": 0, "data": d, "meta": _meta()}
+        except Exception:
+            pass
         empty = dict(code=code, name=_name_of(code) or code,
                      dates=[], bars=[], volumes=[], pivot_line=[],
                      ma30=[], ma60=[], ma120=[], ma250=[], bands=[],

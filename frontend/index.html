@@ -3650,7 +3650,9 @@
     if (!d) {
       if (S.chartsInst['sectorChart']) { S.chartsInst['sectorChart'].dispose(); delete S.chartsInst['sectorChart']; }
       $('#sectorLegend').innerHTML = '';
-      $('#sectorChart').innerHTML = `<div class="empty">该行业历史 K 线尚未抓取（当前覆盖 54/124）<br/>现有指标：RS60 ${fmt(s.rs60, 1)} · 距年线 ${pct(s.dev250)} · 年线5周斜率 ${pct(s.slope_5w)} · 距52周高 ${pct(s.dist52)}</div>`;
+      const _cov = (S.market && S.market.coverage) ? S.market.coverage : null;
+      const _covTxt = _cov ? `（当前覆盖 ${_cov.sectors_with_chart}/${_cov.sectors_total}）` : '';
+      $('#sectorChart').innerHTML = `<div class="empty">该行业历史 K 线尚未抓取${_covTxt}<br/>现有指标：RS60 ${fmt(s.rs60, 1)} · 距年线 ${pct(s.dev250)} · 年线5周斜率 ${pct(s.slope_5w)} · 距52周高 ${pct(s.dist52)}</div>`;
       return;
     }
     $('#sectorChart').innerHTML = '';

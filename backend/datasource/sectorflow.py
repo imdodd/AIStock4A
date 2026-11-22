@@ -43,6 +43,7 @@ UA = {
 }
 CLIST_URL = "https://push2.eastmoney.com/api/qt/clist/get"
 FFLOW_URL = "https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get"
+KLINE_URL = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
 TX_RANK_URL = "https://proxy.finance.qq.com/cgi/cgi-bin/rank/pt/getRank"
 
 from data_paths import DATA_DIR
@@ -306,6 +307,50 @@ def history(bk: str, days: int = 15) -> dict:
         _MEM["hist"][mkey] = (time.time(), out)
         return out
     raise RuntimeError("板块资金流历史取数失败，且无本地缓存")
+
+
+def fetch_bk_kline(bk: str, limit: int = 500) -> list[dict]:
+    """抓单个东财板块（BKxxxx）的日 K 线，返回标准 bar（升序）。
+
+    用于补齐本地 pt 板块的 K 线：腾讯 pt 源在全新安装时只回 1 根，算不出
+    阶段序列；东财 push2his 的 secid=90.BKxxxx 能拿到上千根完整日 K。
+
+    fields2 顺序为东财 kline 标准「日期,开盘,收盘,最高,最低,成交量,成交额,…」，
+    注意是「开收高低」而非标准 bar 的「开高低收」，这里显式重排 f52/f53/f54/f55。
+    上游被熔断时直接返回空列表，由调用方回落到本地已有数据，不破坏现有库。
+    """
+    bk = str(bk or "").strip().upper()
+    if not bk.startswith("BK"):
+        return []
+    if upstream_state()["blocked"]:
+        return []
+    try:
+        q = (f"?secid=90.{bk}&fields1=f1,f2,f3,f4,f5,f6"
+             f"&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61"
+             f"&klt=101&fqt=1&lmt={int(limit)}&end=20500101")
+        data = (_get(KLINE_URL + q, timeout=10).get("data") or {})
+        bars = []
+        for line in (data.get("klines") or []):
+            p = line.split(",")
+            if len(p) < 7:
+                continue
+            close = _num(p[2])
+            if not close or close <= 0:
+                continue
+            bars.append({
+                "date": p[0],
+                "open": _num(p[1]) or close,
+                "close": close,
+                "high": _num(p[3]) or close,
+                "low": _num(p[4]) or close,
+                "volume": _num(p[5]) or 0,
+                "amount": _num(p[6]),
+            })
+        bars.sort(key=lambda x: x["date"])
+        return bars
+    except Exception as e:  # noqa: BLE001
+        _trip(f"东财 kline {bk} {type(e).__name__}: {e}")
+        return []
 
 
 def _tx_history(pt: str) -> dict:
