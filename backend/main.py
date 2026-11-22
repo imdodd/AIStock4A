@@ -361,6 +361,30 @@ def holdings_realized_note(body: RealizedNoteIn):
     return {"code": 0, "data": saved, "meta": _meta()}
 
 
+class ClearRealizedIn(BaseModel):
+    confirm: bool = False          # 必须为 true 才执行，防止误触/爬虫直接打接口
+
+
+@app.post("/api/holdings/realized/clear")
+def holdings_realized_clear(body: ClearRealizedIn):
+    """清空已清仓已实现台账，使「累计盈亏」回到等于「持仓盈亏」。
+
+    只清 realized 台账 + 笔记，不动盈亏日历的每日历史（pnl_daily.json）。
+    db 档下同步把 realized 表清空，文件仍是权威副本。
+    必须显式带 confirm=true，避免误触造成不可逆删除。
+    """
+    if not body.confirm:
+        raise HTTPException(400, "需要 confirm=true 才能清空台账（此操作不可撤销）")
+    import pnl
+    cleared = pnl.clear_realized()
+    return {"code": 0,
+            "data": dict(cleared=cleared,
+                         realized_total=0.0,
+                         summary=pnl.summarize(_holdings_view(),
+                                              as_of=(_load("market.json") or {}).get("date"))),
+            "meta": _meta()}
+
+
 class HoldingIn(BaseModel):
     code: str
     name: str | None = None

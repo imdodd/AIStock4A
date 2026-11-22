@@ -375,6 +375,47 @@ def realized_summary() -> dict:
     }
 
 
+def clear_realized() -> dict:
+    """清空已清仓已实现台账（用户手动重置累计盈亏基准）。
+
+    清空后 累计盈亏 = 持仓盈亏 + 0，即回到当前持仓的未实现浮盈。
+    一并清掉交易笔记（realized_notes.json）—— 笔记的 key 绑定台账条目，
+    台账没了笔记就是孤儿，留着既看不到又占空间。
+
+    **不动 pnl_daily.json 每日盈亏历史**：那是独立的一个交易日一条的快照，
+    盈亏日历、月度统计都读它；用户要清的是「累计盈亏里的已实现部分」，
+    不是抹掉整段历史。历史记录里保存的 realized_pnl / all_total 是当日快照，
+    如实反映当时状态，不回改。
+
+    返回清空前的信息，便于前端提示与审计。原子写，失败不破坏原文件。
+    在 STORAGE_READ=db 档下，storage_runtime 会 _wrap_write 本函数，
+    写空文件后自动把空表同步回库，文件仍是权威副本。
+    """
+    with _lock:
+        rows = load_realized()
+        cleared = len(rows)
+        amount = round(sum(r["realized_pnl"] for r in rows
+                           if isinstance(r.get("realized_pnl"), (int, float))), 2)
+        codes = sorted({r.get("code") for r in rows if r.get("code")})
+        os.makedirs(DIR, exist_ok=True)
+        # 台账写空数组
+        tmp = REALIZED_PATH + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump([], f, ensure_ascii=False, indent=1)
+        os.replace(tmp, REALIZED_PATH)
+        # 笔记写空字典；文件不存在时也顺手建一个，保持两文件状态一致
+        ntmp = NOTES_PATH + ".tmp"
+        with open(ntmp, "w", encoding="utf-8") as f:
+            json.dump({}, f, ensure_ascii=False, indent=1)
+        os.replace(ntmp, NOTES_PATH)
+    return {
+        "cleared": cleared,
+        "amount": amount,
+        "codes": codes,
+        "cleared_at": datetime.now().isoformat(timespec="seconds"),
+    }
+
+
 def entry_key(e: dict) -> str:
     """台账条目的稳定标识：代码 | 清仓日 | 入库时间。
 

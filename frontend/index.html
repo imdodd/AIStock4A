@@ -867,6 +867,9 @@
   .pnl-card .lb{font-size:11px;color:var(--muted);display:flex;justify-content:space-between;gap:8px;white-space:nowrap}
   .pnl-card .val{font-size:23px;font-weight:700;line-height:1.4;letter-spacing:.3px;font-variant-numeric:tabular-nums}
   .pnl-card .sub{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pnl-clear-btn{border:1px solid var(--line);background:var(--panel);color:var(--muted);
+    border-radius:5px;padding:1px 7px;font-size:10px;line-height:1.5;cursor:pointer;white-space:nowrap;transition:.15s}
+  .pnl-clear-btn:hover{border-color:#ff6b6b;color:#ff6b6b;background:rgba(255,107,107,.08)}
   .pnl-note{background:var(--panel2);border:1px solid var(--line);border-radius:10px;
     padding:9px 12px;font-size:11px;color:var(--muted);line-height:1.6;
     display:grid;gap:3px;align-content:center}
@@ -5560,7 +5563,7 @@
           <div class="sub">${PNL_PCT(s.totalPct)} · 持仓成本 ¥${s.cv.toLocaleString('zh-CN', { maximumFractionDigits: 0 })} · 未实现浮盈</div>
         </div>
         <div class="pnl-card">
-          <div class="lb"><span>累计盈亏</span><span>持仓 + 已清仓</span></div>
+          <div class="lb"><span>累计盈亏</span>${realized ? '<button class="pnl-clear-btn" id="pnlClearBtn" type="button" title="清空已清仓台账，使累计盈亏回到持仓盈亏">清空历史</button>' : '<span>持仓 + 已清仓</span>'}</div>
           <div class="val ${PNL_CLS(allTotal)}">${PNL_MONEY(allTotal)}</div>
           <div class="sub">含已清仓已实现 ${PNL_MONEY(realized)}${realized ? ' · 删除持仓时结转' : ' · 暂无清仓记录'}</div>
         </div>
@@ -5571,6 +5574,37 @@
           <div class="pnl-note-row"><b>明细</b><span>逐日盈亏与逐股贡献见上方<b>「盈亏日历」</b>视图，点某个交易日即可查看当日各股明细；已清仓的成交记录见<b>「清仓股」</b>。</span></div>
         </div>
       </div>`;
+    const clearBtn = $('#pnlClearBtn');
+    if (clearBtn && !clearBtn.__bound) {
+      clearBtn.__bound = true;
+      clearBtn.addEventListener('click', () => clearRealizedHistory(realized));
+    }
+  }
+
+  // 清空已清仓已实现台账：累计盈亏回到等于持仓盈亏。
+  // 只清 realized 台账 + 笔记，不动盈亏日历的每日历史（用户已确认的范围）。
+  async function clearRealizedHistory(realizedNow) {
+    const ok = await modalConfirm(
+      '清空已清仓盈亏历史？',
+      `将删除全部 ${S.realizedEntries.length || '若干'} 条清仓记录，累计盈亏会从 ${PNL_MONEY((PNL_N(calcPnlSummary(S.holdings).total) || 0) + (PNL_N(realizedNow) || 0))} 变为等于持仓盈亏 ${PNL_MONEY(calcPnlSummary(S.holdings).total)}。<br/>此操作不可撤销；盈亏日历的每日记录会保留。`,
+      '确认清空');
+    if (!ok) return;
+    try {
+      const d = await apiSend('/api/holdings/realized/clear', 'POST', { confirm: true });
+      // 前端状态同步：台账清零，重拉 stats 让日历/月度也反映新基准
+      S.pnlRealized = 0;
+      S.realizedEntries = [];
+      S.realizedData = null;
+      if (d && d.data && d.data.summary) {
+        // 后端已回传清空后的汇总，可用于核对；金额仍以本地同口径计算为准
+      }
+      toast(`已清空 ${(d && d.data && d.data.cleared) || 0} 条清仓记录 · 累计盈亏已回到持仓盈亏`);
+      renderPnlSummary();
+      if (S.holdView === 'realized') loadRealized(true);
+      if (S.holdView === 'calendar') { S.calData = null; loadCalendar(S.calMonth); }
+    } catch (e) {
+      toast('清空失败：' + e.message, true);
+    }
   }
 
   async function renderHoldingsTab(keepSelection) {

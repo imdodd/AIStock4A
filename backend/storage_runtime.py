@@ -275,6 +275,9 @@ def install(cfg=None, src: str | None = None, repo=None, force: bool = False) ->
             _wrap_write(watchstore, "remove", active_repo, src, ("watchlist",))
             _wrap_write(pnl, "record", active_repo, src, ("pnl_daily",))
             _wrap_write(pnl, "record_realized", active_repo, src, ("realized",))
+            # 清空台账：函数先把 realized.json 写空，这里把空表同步回库；
+            # 不清会导致 db 档读函数仍从 realized 表读到清仓记录，累计盈亏回不去。
+            _wrap_write(pnl, "clear_realized", active_repo, src, ("realized",))
             _wrap_write(news, "save", active_repo, src, ("news_daily",))
             _wrap_write(news, "purge", active_repo, src, ("news_daily",))
             _wrap_write(tracking, "save", active_repo, src, ("tracking_plans",),
