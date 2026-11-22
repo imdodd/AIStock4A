@@ -94,6 +94,9 @@ SEARCH_RECIPE = (
     "交易日：先搜「A股 {day_cn} 板块 异动 原因」，再搜「世界经济 美联储 货币政策 {day_cn}」"
     "这类宏观主题；再对查询范围里每只个股搜「<个股名> {day_cn} 公告」；"
     "再对 Stage1/Stage2 重点行业搜「<行业名> {day_cn} 最新消息」。"
+    "美国权威财经源必须单独搜：用英文搜「US stocks Fed inflation {day_en} Reuters AP CNBC」、"
+    "「Wall Street {day_en} Bloomberg WSJ MarketWatch」这类词，覆盖美股大盘、美联储、"
+    "通胀就业、美元美债、中美贸易与半导体出口管制等主题。"
 )
 WEEKEND_RECIPE = (
     "每条查询都必须带上采集日的具体日期，禁止用搜索结果里看到的其它日期替换。"
@@ -101,6 +104,18 @@ WEEKEND_RECIPE = (
     "「{day_cn} 海外市场 美股 美联储 最新」；再搜「<个股名> {day_cn} 公告」与"
     "「下周 A股 展望 {day_cn}」；对重点行业搜「<行业名> {day_cn} 消息」。"
     "不要搜「板块异动原因」这类交易日模板——周末没有盘中异动。"
+    "美国权威财经源必须单独搜：用英文搜「Fed inflation US stocks {day_en} Reuters AP」、"
+    "「Wall Street week ahead {day_en} Bloomberg CNBC WSJ」这类词，周末海外政策、"
+    "经济数据与下周展望照常收录。"
+)
+# 美国权威财经源白名单：给模型明确的媒体清单，避免搜到营销号 / 聚合站的低质内容。
+US_SOURCES_HINT = (
+    "美国权威财经源优先：Reuters 路透社、AP 美联社、Bloomberg 彭博、CNBC、"
+    "Wall Street Journal 华尔街日报、Financial Times 金融时报、MarketWatch、"
+    "Yahoo Finance、Nasdaq、Investopedia、Federal Reserve 美联储官网、"
+    "BLS 美国劳工统计局、BEA 美国经济分析局、白宫 / 美国财政部 / USTR 官方发布。"
+    "这些源的报道即使不点名 A 股也要收——美联储利率、美国通胀就业、美元指数、"
+    "美债收益率、美股科技巨头、中美贸易与出口管制，都是本系统判断大盘与板块的关键输入。"
 )
 
 
@@ -113,7 +128,7 @@ def _cfg() -> dict | None:
 
 
 def _build_prompt(day: str, sectors: list[dict], stocks: list[dict],
-                  stock_focus: list[dict]) -> str:
+                  stock_focus: list[dict], us_rss_block: str = "") -> str:
     stock_hint = "、".join(f"{s['code']}={s['name']}" for s in stock_focus) or "（无）"
     # 查询范围用 S1/S2，标注范围用全部板块——与 news_judge 的分离原则一致
     query_names = "、".join(s["name"] for s in sectors[:16]) or "（无）"
@@ -121,17 +136,22 @@ def _build_prompt(day: str, sectors: list[dict], stocks: list[dict],
     floor = _freshness_floor(day).strftime("%Y-%m-%d %H:%M")
     dt = datetime.strptime(day, "%Y-%m-%d")
     day_cn = f"{dt.year}年{dt.month}月{dt.day}日"
+    day_en = dt.strftime("%B %d %Y").replace(" 0", " ")  # e.g. November 22 2026
     is_weekend = dt.weekday() >= 5
-    recipe = (WEEKEND_RECIPE if is_weekend else SEARCH_RECIPE).replace("{day_cn}", day_cn)
+    recipe = ((WEEKEND_RECIPE if is_weekend else SEARCH_RECIPE)
+              .replace("{day_cn}", day_cn).replace("{day_en}", day_en))
     return f"""你是 A 股资讯的增量判断器。采集日 {day_cn}（交易日与非交易日一视同仁）。
 周末与节假日同样要采集：政策发布、海外市场、公司公告常在非交易日出现，周一开盘前必须已在库里。
-用联网搜索采集确有增量的资讯。
+用联网搜索采集确有增量的资讯。中美两边的财经资讯都要有，美国权威源的英文报道翻译成中文输出。
 
 查询范围：个股（{stock_hint}）；行业（{query_names} 等 Stage1/Stage2 行业）；
 大局（国内外宏观经济、世界经济、货币政策、海外市场——官方媒体这类报道即使不点名 A 股
 也对本系统判断大盘有价值，必须保留，不许当「与 A 股无关」剔除）。
+{US_SOURCES_HINT}
 搜索方式：{recipe}
-只保留对大局 / 板块 / 个股确有增量的新闻，最多 6 条。只输出一个 JSON 对象，不要解释文字。
+{us_rss_block}
+只保留对大局 / 板块 / 个股确有增量的新闻，最多 6 条；其中美国权威源至少 2 条（有真增量时）。
+只输出一个 JSON 对象，不要解释文字。
 
 输出格式：
 {{"date":"{day}","summary":"本轮大局一句话","window":"检索时间窗","source_of_truth":"事实摘自所列公开报道；板块/个股影响为模型推断，不构成买卖建议。","items":[
@@ -148,6 +168,12 @@ def _build_prompt(day: str, sectors: list[dict], stocks: list[dict],
 sources[].snippet 里逐字找到。snippet 从搜索结果摘要里完整摘录，不要改写数字。
 找不到带数字的摘要就把数字改成定性描述，绝不许自己补数字。这是硬校验，编数会被整条丢弃。
 
+硬约束 0b · 英文报道翻译成中文（用户明确要求）：美国源的英文稿，title / summary /
+impact_note / logic / keywords / 各 note 全部翻成通顺中文；source 写「Reuters 路透社」
+这种中英对照，url 保留原文链接。但 sources[].snippet 必须【逐字保留英文原文】，
+绝不能把 snippet 翻译成中文——数字校验是拿中文正文里的数字去 snippet 里逐字比对，
+snippet 一翻译英文数字（如 9.8 billion）就对不上，整条会被当编数丢弃。
+
 硬约束 1：sectors 和 stocks 必须是【对象数组】，每个元素含 code/name/dir/note 四个字段，
 绝不能写成字符串数组。没有相关标的就写 []。
 
@@ -156,10 +182,13 @@ sources[].snippet 里逐字找到。snippet 从搜索结果摘要里完整摘录
 
 硬约束 3：stocks[].code 必须从查询范围的个股里选，不许编造。
 
-  硬约束 4：time 必须是原文发布时间，且不得早于 {floor}。旧公告、旧研报、旧处罚、
-  旧行情解读即使第一次搜到也不算增量；宁可返回 items: []，不要把旧闻翻炒成新消息。
-  特别注意：你的检索词里若出现不是 {day_cn} 的日期（例如从搜索结果里抄来的旧日期），
-  立刻改成 {day_cn} 重新搜。日期锚点只能是采集日 {day_cn}，一天都不许前移。
+  硬约束 4：time 必须是原文发布时间，统一换算成北京时间（UTC+8，格式 YYYY-MM-DD HH:MM），
+  且不得早于 {floor}。美国源常见美东时间 ET / EDT，比北京时间慢 12–13 小时，
+  务必 +12~13 小时换算后再填——照抄美东时间会被判成旧闻整条丢弃。
+  旧公告、旧研报、旧处罚、旧行情解读即使第一次搜到也不算增量；宁可返回 items: []，
+  不要把旧闻翻炒成新消息。特别注意：你的检索词里若出现不是 {day_cn} 的日期
+  （例如从搜索结果里抄来的旧日期），立刻改成 {day_cn} 重新搜。
+  日期锚点只能是采集日 {day_cn}，一天都不许前移。
 
   硬约束 5：没有实质增量就返回 items: []。非交易日的政策/海外/公告若有增量照常收录，
   但如果翻来覆去只有 {floor[:10]} 之前的旧稿，就返回 items: []，不要拿旧闻填空。"""
@@ -242,7 +271,9 @@ def write_raw(day: str, patch: dict | None, info: dict) -> str | None:
         payload = {"date": day, "generated_at": datetime.now(CN_TZ).isoformat(timespec="seconds"),
                    "model": SEARCH_MODEL, "queries": info.get("queries") or [],
                    "raw_sources": info.get("raw_sources") or [],
-                   "usage": info.get("usage") or {}, "patch": patch}
+                   "usage": info.get("usage") or {}, "patch": patch,
+                   "us_rss_fetched": info.get("us_rss_fetched") or 0,
+                   "us_rss_errors": info.get("us_rss_errors") or []}
         tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=1)
@@ -283,9 +314,25 @@ def search(day: str, cfg: dict | None = None, dry_run: bool = False) -> dict:
     sectors = news_judge.all_sectors()
     stocks = [{"code": s["code"], "name": s["name"]} for s in sectors]
     stock_focus = news_judge.focus_stocks()
-    prompt = _build_prompt(day, sectors, stocks, stock_focus)
+
+    # 美国权威源 RSS：直抓英文原文喂给 LLM 翻译（联网搜索实测只返中文站，
+    # 靠英文查询词拿不到 Reuters/美联储/NPR）。失败不影响主检索链。
+    from jobs import us_rss
+    us_items: list[dict] = []
+    us_errors: list[str] = []
+    if (os.environ.get("US_RSS_ENABLED", "1") or "1").strip().lower() in ("1", "true", "yes", "on"):
+        try:
+            got = us_rss.fetch(day)
+            us_items = got.get("items") or []
+            us_errors = got.get("errors") or []
+        except Exception as e:
+            us_errors = [f"{type(e).__name__}: {str(e)[:100]}"]
+    rss_block = us_rss.as_prompt_block(us_items)
+    prompt = _build_prompt(day, sectors, stocks, stock_focus, us_rss_block=rss_block)
 
     patch, info = _call(cfg, prompt, day)
+    info["us_rss_fetched"] = len(us_items)
+    info["us_rss_errors"] = us_errors
     raw_path = write_raw(day, patch, info) if not dry_run else None
     if patch is None:
         return {"ok": False, "skip": False, "raw_file": raw_path,
@@ -299,6 +346,11 @@ def search(day: str, cfg: dict | None = None, dry_run: bool = False) -> dict:
     num_ctx = [{"title": str(s.get("title") or ""),
                 "snippet": str(s.get("snippet") or "")}
                for s in info.get("raw_sources") or [] if isinstance(s, dict)]
+    # 美国源 RSS 英文原文也进白名单：数字是真实抓取的（如 NPR 的 "S&P 500 sinks 3.7%"），
+    # 中文翻译后要逐字核对，不放进白名单会被整条当编数拒。
+    num_ctx += [{"title": str(s.get("title") or ""),
+                 "snippet": str(s.get("summary") or "")}
+                for s in us_items if isinstance(s, dict)]
     # 当日已入库新闻（全部过过契约）的标题与摘要也进白名单：指数点位、涨跌幅、
     # 成交额这类市场数字会在多轮间重复出现，多轮互相印证，不算编数。
     try:
