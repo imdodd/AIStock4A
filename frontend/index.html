@@ -202,6 +202,9 @@
   html[data-theme="light"] .nc-impact.mix{color:#8a5a00}
   html[data-theme="light"] .nc-logic{color:var(--metric)}
   html[data-theme="light"] .nc-logic b{color:var(--text)}
+  html[data-theme="light"] .nc-orig{background:rgba(255,107,26,.04)}
+  html[data-theme="light"] .nc-orig .og-h b{color:#8a5a00}
+  html[data-theme="light"] .nc-orig pre{background:rgba(255,255,255,.7);color:#4b4038;border-color:var(--line)}
   /* 持仓行内控件：浅色下把亮绿/亮橙收成主题深绿与砖橙 */
   html[data-theme="light"] .track-pill{background:rgba(18,153,107,.10);border-color:rgba(18,153,107,.35)}
   html[data-theme="light"] .track-pill:hover{background:rgba(18,153,107,.18)}
@@ -553,6 +556,14 @@
   .nc-logic{font-size:11px;line-height:1.8;color:#9fb0c9;background:rgba(255,255,255,.025);
     border-radius:7px;padding:7px 9px;margin-top:8px}
   .nc-logic b{color:#cfe0ff;font-weight:600;margin-right:6px}
+  .nc-orig{margin-top:8px;border-top:1px dashed var(--line);padding-top:7px}
+  .nc-orig .og-h{display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+    font-size:10px;color:var(--muted)}
+  .nc-orig .og-h b{color:var(--softblue);font-weight:600}
+  .nc-orig pre{margin:6px 0 0;font:11px/1.65 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    white-space:pre-wrap;word-break:break-word;color:var(--soft);
+    background:rgba(77,141,255,.06);border:1px solid var(--line);border-radius:7px;
+    padding:7px 9px;max-height:132px;overflow:auto}
   .nc-tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
   .nc-tag{font-size:10px;border-radius:5px;padding:2px 7px;cursor:pointer;border:1px solid var(--line);
     background:rgba(255,255,255,.03);color:var(--metric);white-space:nowrap}
@@ -4205,6 +4216,13 @@
     paintNews();
   }
 
+  function isEnglishEvidence(s) {
+    const t = String((s && (s.snippet || s.title)) || '');
+    const en = (t.match(/[A-Za-z]/g) || []).length;
+    const zh = (t.match(/[\u4e00-\u9fa5]/g) || []).length;
+    return en >= 12 && en > zh;
+  }
+
   function newsCardHtml(it) {
     const cls = IMPACT_CLS[it.impact] || 'flat';
     const title = it.url
@@ -4214,6 +4232,11 @@
         data-sector="${he(s.code || '')}" data-name="${he(s.name || '')}" title="${he(s.note || '')}">${he(s.name || '')}<i class="${IMPACT_CLS[s.dir] || ''}">${he(s.dir || '')}</i></span>`).join('');
     const stks = (it.stocks || []).map(s => `<span class="nc-tag stock"
         data-stock="${he(s.code || '')}" title="${he(s.note || '')}">${he(s.name || s.code || '')}<i class="${IMPACT_CLS[s.dir] || ''}">${he(s.dir || '')}</i></span>`).join('');
+    const enSrcs = (it.sources || []).filter(isEnglishEvidence);
+    const orig = enSrcs.length
+      ? `<div class="nc-orig"><div class="og-h"><b>EN 原文</b><span>${he(it.us_rss_source || enSrcs[0].title || '')}</span></div>`
+        + enSrcs.map(s => `<pre>${he(s.snippet || s.title || '')}</pre>`).join('') + `</div>`
+      : '';
     return `<div class="news-card ni-${cls}">
       <div class="nc-top"><span class="nc-cat">${he(it.category_name || '其他')}</span>
         <span class="nc-impact ${cls}">${he(it.impact || '中性')}</span>
@@ -4223,6 +4246,7 @@
       <div class="nc-src">${he(it.source || '')}${(it.keywords || []).length ? ' · ' + it.keywords.map(k => he(k)).join(' / ') : ''}</div>
       <div class="nc-sum">${he(it.summary || '')}</div>
       ${it.logic ? `<div class="nc-logic"><b>传导逻辑</b>${he(it.logic)}</div>` : ''}
+      ${orig}
       ${secs ? `<div class="nc-tags">${secs}</div>` : ''}
       ${stks ? `<div class="nc-tags">${stks}</div>` : ''}
     </div>`;
@@ -4312,6 +4336,7 @@
     }));
     $('#newsNote').innerHTML = `<b>口径</b>：${he(d.source_of_truth || '公开报道摘录 + 影响推断')}<br/>
       <b>更新</b>：每 30 分钟自动检索增量资讯并追加到 <code>data/news/&lt;日期&gt;.json</code>，新条目排在最前；超过 30 天的日文件自动清理，本页只读本地文件。<br/>
+      <b>原文</b>：带美国权威源英文稿的条目会显示「EN 原文」块，英文摘要取自 sources[].snippet，中文判断与影响标注为模型推断。<br/>
       <b>颜色</b>：A 股口径，红=利多 / 绿=利空；「净影响」只是条数差，不是强度或涨跌预测。<br/>
       ${he(d.disclaimer || '')}　不构成买卖建议。`;
   }

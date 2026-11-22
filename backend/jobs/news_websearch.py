@@ -40,7 +40,7 @@ from data_paths import DATA_DIR  # noqa: E402
 import ai  # noqa: E402
 import news  # noqa: E402
 from config import universe  # noqa: E402
-from contracts.validate import validate_patch  # noqa: E402
+from contracts.validate import extract_numbers, validate_patch  # noqa: E402
 from jobs import news_judge, news_update  # noqa: E402
 
 CN_TZ = timezone(timedelta(hours=8))
@@ -303,6 +303,66 @@ def _fallback_facts(day: str, dry_run: bool = False) -> dict:
             "errors": errors, "patch": patch}
 
 
+def _rss_sig(row: dict) -> set[float]:
+    """给 RSS 英文稿抽「辨识度数字」：年份与个位小数字不算，避免乱配。"""
+    text = " ".join(str(row.get(k) or "") for k in ("title", "summary", "snippet"))
+    out: set[float] = set()
+    for n in extract_numbers(text):
+        if 1900 <= n <= 2100 and float(n).is_integer():
+            continue
+        if n >= 100 or n != int(n):
+            out.add(n)
+    return out
+
+
+def attach_us_rss_evidence(items: list[dict], us_items: list[dict]) -> int:
+    """把美国 RSS 英文原文回填到采用同一事实的中文条目上。
+
+    DeepSeek 实测会把 NPR 的「S&P 500 sinks 3.7%」翻成中文后改挂财联社链接，
+    导致 sources[].snippet 只剩中文，前端看不到英文原稿。这里用真实数字指纹
+    （如 500 / 3.7）识别这种「同事实不同来源」，把英文原题、原文摘要、原链接
+    作为一条独立 evidence 追加进 sources[]，不改模型写好的中文判断。
+    返回成功回填的条数。
+    """
+    if not items or not us_items:
+        return 0
+    rss = [(x, _rss_sig(x)) for x in us_items if isinstance(x, dict)]
+    rss = [(x, s) for x, s in rss if s]
+    if not rss:
+        return 0
+    attached = 0
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        blob = " ".join(str(it.get(k) or "") for k in
+                        ("title", "summary", "impact_note", "logic"))
+        blob += " " + " ".join(str(x.get("note") or "") for x in
+                              (it.get("sectors") or []) if isinstance(x, dict))
+        sig = _rss_sig({"title": blob})
+        best, best_hit = None, set()
+        for row, rsig in rss:
+            hit = sig & rsig
+            # 单个「500」会被所有提到标普的稿子命中，至少两个辨识数字才算同一事实。
+            if len(hit) >= 2 and len(hit) > len(best_hit):
+                best, best_hit = row, hit
+        if best is None:
+            continue
+        srcs = it.setdefault("sources", [])
+        url = str(best.get("url") or "")
+        if not any(str(s.get("url") or "") == url for s in srcs if isinstance(s, dict)):
+            srcs.append({
+                "title": str(best.get("title") or ""),
+                "url": url,
+                "time": str(best.get("time") or ""),
+                "snippet": str(best.get("summary") or best.get("title") or ""),
+                "fetched_by": "us_rss",
+            })
+        it["us_rss_source"] = str(best.get("source") or "")
+        it["us_rss_en_title"] = str(best.get("title") or "")
+        attached += 1
+    return attached
+
+
 def search(day: str, cfg: dict | None = None, dry_run: bool = False) -> dict:
     """主入口：联网检索 → 契约校验 → 返回可直接交给 news_update.apply 的 patch。
 
@@ -384,6 +444,9 @@ def search(day: str, cfg: dict | None = None, dry_run: bool = False) -> dict:
         it["codes"] = [s["code"] for s in (it.get("stocks") or []) if s.get("code")]
         it["fetched_by"] = "news_websearch"
         fresh_items.append(it)
+    # 回填美国 RSS 英文原文：模型常把英文稿翻成中文后改挂中文站来源，
+    # 不回填的话前端 sources[].snippet 里看不到任何英文原稿。
+    info["us_rss_attached"] = attach_us_rss_evidence(fresh_items, us_items)
     kept_patch["items"] = fresh_items
 
     queries = info.get("queries") or []
@@ -397,7 +460,11 @@ def search(day: str, cfg: dict | None = None, dry_run: bool = False) -> dict:
                 "rejected": rejected, "kept": 0, "patch": None}
     return {"ok": True, "skip": False, "raw_file": raw_path, "queries": queries,
             "rejected": rejected, "kept": len(kept_patch["items"]),
-            "usage": info.get("usage") or {}, "patch": kept_patch}
+            "usage": info.get("usage") or {},
+            "us_rss_fetched": info.get("us_rss_fetched") or 0,
+            "us_rss_attached": info.get("us_rss_attached") or 0,
+            "us_rss_errors": info.get("us_rss_errors") or [],
+            "patch": kept_patch}
 
 
 def main() -> int:
