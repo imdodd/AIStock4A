@@ -5,6 +5,7 @@
     python -m jobs.eod --skip-fetch    # 跳过抓取，只用本地数据重建快照（离线调试用）
     python -m jobs.eod --force-fetch   # 强制重抓全部标的（补历史时用）
     python -m jobs.eod --skip-research # 跳过个股研究档案生成（首次生成较慢）
+    python -m jobs.eod --force-members # 强制重算全部行业成分股快照（默认复用当日缓存）
 
 退出码：0 成功 / 1 抓取失败但快照可用 / 2 管道中断
 """
@@ -37,19 +38,49 @@ def log(msg, fh=None):
 
 
 def run(cmd: list[str], fh, title: str) -> bool:
+    """执行子任务：实时透传输出，同时写入 EOD 日志。
+
+    以前用 capture_output=True 攒完再一次性打印，⑥ 全量跑 20 分钟时终端看起来
+    像卡死（其实子进程正在刷 [n/124]）。现在逐行透传，进度实时可见。
+    PYTHONUNBUFFERED=1 保证子进程 print 不攒在管道缓冲里。
+    """
     log(f"[RUN] {title}", fh)
     t = time.time()
-    p = subprocess.run(cmd, cwd=HERE, capture_output=True, text=True, encoding="utf-8",
-                       errors="replace")
-    for line in (p.stdout or "").splitlines():
-        if line.strip():
-            print("   " + line, flush=True)
-            fh.write("   " + line + "\n")
-    if p.returncode != 0:
-        for line in (p.stderr or "").splitlines()[-15:]:
+    env = dict(os.environ)
+    env["PYTHONUNBUFFERED"] = "1"
+    p = subprocess.Popen(
+        cmd, cwd=HERE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, encoding="utf-8", errors="replace", bufsize=1, env=env,
+    )
+    tail: list[str] = []
+    try:
+        assert p.stdout is not None
+        for line in p.stdout:
+            line = line.rstrip("\r\n")
+            tail.append(line)
+            if len(tail) > 15:
+                tail.pop(0)
+            if line.strip():
+                print("   " + line, flush=True)
+                fh.write("   " + line + "\n")
+                fh.flush()
+        rc = p.wait()
+    except KeyboardInterrupt:
+        # Ctrl-C 时一并停掉子进程，别留孤儿在后台继续烧请求
+        p.terminate()
+        try:
+            p.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            p.kill()
+        fh.flush()
+        fh.close()
+        raise
+    if rc != 0:
+        for line in tail:
             print("   ! " + line, flush=True)
             fh.write("   ! " + line + "\n")
-        log(f"[FAIL] {title} 失败（exit {p.returncode}，{time.time() - t:.1f}s）", fh)
+        fh.flush()
+        log(f"[FAIL] {title} 失败（exit {rc}，{time.time() - t:.1f}s）", fh)
         return False
     log(f"[OK] {title} 完成（{time.time() - t:.1f}s）", fh)
     return True
@@ -106,6 +137,7 @@ def main(argv=None) -> int:
     argv = argv or []
     skip_fetch = "--skip-fetch" in argv
     force_fetch = "--force-fetch" in argv
+    force_members = "--force-members" in argv
     skip_research = "--skip-research" in argv
 
     os.makedirs(LOG_DIR, exist_ok=True)
@@ -190,11 +222,16 @@ def main(argv=None) -> int:
     #    EOD 不刷新，导致板块下钻/行业异动/搜索行业标签长期滞后。
     #    必须在 ⑤ 之后：本步直接读 ⑤ 产出的 flow_sector_map.json / flow_members.json。
     #    全量约 6~10 分钟，单行业失败会保留旧快照，不中断主流程。
+    #    默认不加 --force：fetch_members 自带「当日 as_of 已算过就跳过」的断点续跑，
+    #    新交易日 as_of 变化会自动重算；只有显式 --force-members 才强刷（补历史/改口径用）。
+    #    这样同日重跑（失败重试、手动补跑）只补缺的行业，不会每次都烧 20 分钟。
     if skip_fetch:
         log("○ 跳过成分股阶段快照（--skip-fetch）", fh)
     else:
-        run([sys.executable, "-m", "jobs.fetch_members", "--all", "--force"], fh,
-            "⑥ 刷新行业成分股阶段快照（东财申万全量）")
+        cmd = [sys.executable, "-m", "jobs.fetch_members", "--all"]
+        if force_members:
+            cmd.append("--force")
+        run(cmd, fh, "⑥ 刷新行业成分股阶段快照（东财申万全量）")
 
     # ⑦ 全市场关注池：把 ⑥ 产出的 5109 只成分股阶段/关键点信号汇总、筛选、
     #    排序成「今天值得关注的股票」，写 focus_pool.json 供 /api/signals 读取。
