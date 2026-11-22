@@ -75,7 +75,12 @@ def norm(nodes):
 
 def main():
     raw = json.load(open(os.path.join(RAW, "klines.json"), encoding="utf-8"))
-    smeta = json.load(open(os.path.join(RAW, "sectors_meta.json"), encoding="utf-8"))
+    _smeta_path = os.path.join(RAW, "sectors_meta.json")
+    if os.path.exists(_smeta_path):
+        smeta = json.load(open(_smeta_path, encoding="utf-8"))
+    else:
+        print("[WARN] sectors_meta.json 缺失，按空板块表继续（可放置公开样例种子）")
+        smeta = {}
     stu = json.load(open(os.path.join(RAW, "stocks_meta.json"), encoding="utf-8")) if os.path.exists(os.path.join(RAW, "stocks_meta.json")) else {}
     os.makedirs(CHARTS, exist_ok=True)
 
