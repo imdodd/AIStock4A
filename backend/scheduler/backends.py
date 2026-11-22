@@ -48,6 +48,10 @@ class BackendBase:
     def stop(self) -> None:
         raise NotImplementedError
 
+    def heal(self) -> bool:
+        """底层调度线程停摆时整体自愈；健康时返回 False。"""
+        return False
+
     @property
     def running(self) -> bool:
         raise NotImplementedError
@@ -57,16 +61,21 @@ class APSchedulerBackend(BackendBase):
     name = "apscheduler"
 
     def __init__(self, misfire_grace_time: int = 7200):
+        self._misfire = misfire_grace_time
+        self._crons: dict[str, str] = {}
+        self._callbacks: dict[str, object] = {}
+        self._lock = threading.RLock()
+        self._scheduler = self._build_scheduler()
+
+    def _build_scheduler(self):
         from apscheduler.schedulers.background import BackgroundScheduler
         from apscheduler.jobstores.memory import MemoryJobStore
-        self._scheduler = BackgroundScheduler(
+        return BackgroundScheduler(
             timezone=CN_TZ,
             jobstores={"default": MemoryJobStore()},
             job_defaults={"coalesce": True, "max_instances": 1,
-                          "misfire_grace_time": misfire_grace_time},
+                          "misfire_grace_time": self._misfire},
         )
-        self._crons: dict[str, str] = {}
-        self._lock = threading.RLock()
 
     def add(self, job_id: str, cron: str, callback, replace: bool = True) -> None:
         from apscheduler.triggers.cron import CronTrigger
@@ -77,6 +86,7 @@ class APSchedulerBackend(BackendBase):
                                     args=[job_id], replace_existing=replace,
                                     coalesce=True, max_instances=1)
             self._crons[job_id] = " ".join(cron.split())
+            self._callbacks[job_id] = callback
 
     def remove(self, job_id: str) -> bool:
         with self._lock:
@@ -84,6 +94,7 @@ class APSchedulerBackend(BackendBase):
                 return False
             self._scheduler.remove_job(job_id)
             self._crons.pop(job_id, None)
+            self._callbacks.pop(job_id, None)
             return True
 
     def reschedule(self, job_id: str, cron: str) -> bool:
@@ -117,6 +128,35 @@ class APSchedulerBackend(BackendBase):
     def stop(self) -> None:
         if self._scheduler.running:
             self._scheduler.shutdown(wait=False)
+
+    def heal(self) -> bool:
+        """调度线程停摆时重建实例并回填全部 job。
+
+        系统休眠、时钟跳变或某轮任务抛异常，都可能让 APScheduler 的主循环
+        失去唤醒（表现：next_run_time 停在过去不再前进）。仅 reschedule 单个
+        job 无法救回已停摆的调度线程，必须新建实例；shutdown(wait=False) 不
+        等待正在执行的任务，配合 core 的 job_runs 去重不会重复入库。
+        """
+        with self._lock:
+            from apscheduler.triggers.cron import CronTrigger
+            was_running = bool(self._scheduler.running)
+            try:
+                if was_running:
+                    self._scheduler.shutdown(wait=False)
+            except Exception:                              # noqa: BLE001
+                pass
+            self._scheduler = self._build_scheduler()
+            for jid, cron in list(self._crons.items()):
+                cb = self._callbacks.get(jid)
+                if cb is None:
+                    continue
+                self._scheduler.add_job(
+                    cb, trigger=CronTrigger.from_crontab(cron, timezone=CN_TZ),
+                    id=jid, args=[jid], replace_existing=True,
+                    coalesce=True, max_instances=1)
+            if was_running:
+                self._scheduler.start()
+            return True
 
     @property
     def running(self) -> bool:
@@ -211,6 +251,19 @@ class BuiltinBackend(BackendBase):
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=2)
         self._pool.shutdown(wait=False, cancel_futures=True)
+
+    def heal(self) -> bool:
+        with self._lock:
+            if self._thread and self._thread.is_alive():
+                return False
+            # stop() 会关闭线程池；重启时须换新池，否则 submit 抛 RuntimeError。
+            self._pool = ThreadPoolExecutor(max_workers=1,
+                                            thread_name_prefix="astock-job")
+            self._stop_event.clear()
+            self._thread = threading.Thread(target=self._loop,
+                                            name="astock-scheduler", daemon=True)
+            self._thread.start()
+            return True
 
     @property
     def running(self) -> bool:

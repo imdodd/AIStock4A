@@ -30,6 +30,13 @@ def _flag(name: str, default: bool) -> bool:
     return v in ("1", "true", "yes", "on")
 
 
+def _int_env(name: str, default: int, minimum: int) -> int:
+    try:
+        return max(minimum, int((os.environ.get(name) or "").strip() or default))
+    except ValueError:
+        return default
+
+
 class Scheduler:
     def __init__(self, repo=None, backend: BackendBase | None = None):
         self.repo = repo or get_repository(fresh=True)
@@ -44,6 +51,13 @@ class Scheduler:
         self._fixed: dict[str, dict] = {}
         self._lock = threading.RLock()
         self._started = False
+        # 看门狗：定时巡检 next_run_at，停在过去超过阈值就自愈调度器。
+        # 默认开，可用 SCHEDULER_WATCHDOG=0 关闭；间隔/阈值也可环境变量调整。
+        self._watchdog_enabled = _flag("SCHEDULER_WATCHDOG", True)
+        self._watchdog_interval = _int_env("SCHEDULER_WATCHDOG_INTERVAL", 120, 30)
+        self._watchdog_stale = _int_env("SCHEDULER_WATCHDOG_STALE", 900, 120)
+        self._stop_event = threading.Event()
+        self._heals: list[dict] = []
 
     # ------------------------------------------------------------ job 元信息
     def _fixed_defs(self) -> list[dict]:
@@ -133,6 +147,9 @@ class Scheduler:
         if self.catchup:
             threading.Thread(target=self.run_catchup, name="astock-catchup",
                              daemon=True).start()
+        if self._watchdog_enabled:
+            threading.Thread(target=self._watchdog_loop, name="astock-watchdog",
+                             daemon=True).start()
         return self.status()
 
     def run_catchup(self) -> list[dict]:
@@ -153,9 +170,78 @@ class Scheduler:
         return results
 
     def stop(self) -> None:
+        self._stop_event.set()
         if self._started:
             self.backend.stop()
             self._started = False
+
+    # ------------------------------------------------------------ 看门狗
+    def _watchdog_loop(self) -> None:
+        """每 interval 秒巡检一次；独立线程、异常不外泄，自身永不退出。"""
+        while not self._stop_event.wait(self._watchdog_interval):
+            try:
+                self._watchdog_tick()
+            except Exception as e:                       # noqa: BLE001
+                self._heals.append({"at": datetime.now(cal.CN_TZ).isoformat(),
+                                    "action": "error",
+                                    "error": f"{type(e).__name__}: {e}"})
+                del self._heals[:-10]
+
+    def _watchdog_tick(self) -> None:
+        if not self._started or not self.backend.running:
+            return
+        now = datetime.now(cal.CN_TZ)
+        defs = self._all_defs()
+        stale: list[tuple[str, float]] = []
+        missing: list[str] = []
+        for jid, job in defs.items():
+            if not int(job.get("enabled", 1)):
+                continue
+            raw = self.backend.next_run(jid)
+            if not raw:
+                missing.append(jid)
+                continue
+            try:
+                nxt = datetime.fromisoformat(raw)
+            except (TypeError, ValueError):
+                stale.append((jid, -1.0))
+                continue
+            if nxt.tzinfo is None:
+                nxt = nxt.replace(tzinfo=cal.CN_TZ)
+            lag = (now - nxt).total_seconds()
+            if lag > self._watchdog_stale:
+                stale.append((jid, lag))
+
+        if not stale and not missing:
+            return
+
+        def _still_due(jid: str) -> bool:
+            raw = self.backend.next_run(jid)
+            if not raw:
+                return True
+            try:
+                dt = datetime.fromisoformat(raw)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=cal.CN_TZ)
+                return dt <= now
+            except (TypeError, ValueError):
+                return True
+
+        # 有 job 停在过去 → 底层调度线程大概率已停摆，整体重建才有救。
+        healed = bool(self.backend.heal()) if stale else False
+        # 没注册上的（next 缺失）单独补；重建后仍停在过去的也再兜一次。
+        for jid in missing + [j for j, _ in stale if _still_due(j)]:
+            job = defs.get(jid)
+            if job:
+                self.backend.add(jid, job["cron"], self._run, replace=True)
+
+        rec = {"at": now.isoformat(),
+               "stale": [{"id": j, "lag_sec": int(lag)} for j, lag in stale],
+               "missing": missing, "healed": healed}
+        self._heals.append(rec)
+        del self._heals[:-10]
+        print(f"[watchdog] 检测到调度停摆，已自愈：stale={stale} "
+              f"missing={missing} backend_healed={healed}", flush=True)
 
     # ------------------------------------------------------------ 自定义 job CRUD
     def add_custom(self, payload: dict) -> dict:
@@ -231,6 +317,10 @@ class Scheduler:
             "fixed_jobs": len(FIXED_JOBS),
             "custom_jobs": len(self.state.list_defs()),
             "registered": len(jobs),
+            "watchdog": {"enabled": self._watchdog_enabled,
+                         "interval_sec": self._watchdog_interval,
+                         "stale_sec": self._watchdog_stale,
+                         "heals": list(self._heals[-5:])},
             "jobs": [{"id": k, "job_type": v["job_type"], "cron": v["cron"],
                       "custom": v.get("custom", False),
                       "enabled": int(v.get("enabled", 1)),
