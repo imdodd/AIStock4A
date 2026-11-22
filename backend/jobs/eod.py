@@ -162,15 +162,16 @@ def main(argv=None) -> int:
     else:
         log("○ 申万板块骨架 7 天内已刷新，跳过", fh)
 
-    # ⓪′ 板块日K补齐（东财 BK 源）：全新安装时腾讯 pt 只回 1 根，板块整块无图。
-    #    本步只对「缺失/落后/历史不足」的板块抓东财完整日K并按日期并集合并；
-    #    已在跑的实例本地 124 板块已最新 → 全部跳过、klines.json 一根不动。
+    # ⓪′ 板块日K补齐（静态种子优先，东财 BK 兜底）：腾讯 pt 只回 1 根，板块整块无图。
+    #    只读入仓种子 sector_klines_seed.json 即可补齐 124 板块完整历史（零网络），
+    #    从根上避开云主机 IP 被东财频率限流；种子未覆盖的板块才走东财。
+    #    只对「缺失/落后/历史不足」的板块补齐；已在跑的实例 → 全部跳过、零副作用。
     #    放在 ① 之前：补齐后 ① 的 fetch_daily 会因 pt 已最新而跳过，不重复抓腾讯 1 根。
     #    必须在 ② 快照之前：快照要读补齐后的 klines.json 才能算出板块阶段与图表。
     if skip_fetch:
         log("○ 跳过板块日K补齐（--skip-fetch）", fh)
     else:
-        run([sys.executable, "-m", "jobs.fetch_sector_klines"], fh, "⓪′ 补齐板块日K（东财BK源）")
+        run([sys.executable, "-m", "jobs.fetch_sector_klines"], fh, "⓪′ 补齐板块日K（静态种子优先）")
 
     fetch_ok = True
     if skip_fetch:

@@ -1,21 +1,25 @@
-"""补齐申万二级板块（pt*）的日 K 线：腾讯只回 1 根时走东财 BK 源。
+"""补齐申万二级板块（pt*）的日 K 线：静态种子优先，东财 BK 源兜底。
 
 背景：
   全新安装时，腾讯 pt 行业指数源只回 1 根 K 线，build_snapshot 算不出
   MA250/阶段序列，板块页整块无图、指标停在 sectors_meta 静态种子的旧值。
-  东财 push2his 的 secid=90.BKxxxx 能拿到上千根完整日 K（已验证 BK1036
-  返回 1390 根、最新 2026-11-20、收盘 1903.93），用它补齐 pt 板块历史。
+  补齐有两条来源：
+    1) 静态种子 sector_klines_seed.json（随代码入仓，124 板块 312/512 根，末 11-20）
+       —— 服务器只读本地文件、零网络请求，从根本上绕开东财对云主机 IP 的频率限流。
+    2) 东财 push2his secid=90.BKxxxx —— 种子缺某板块或想刷新到更新日期时才抓。
+  默认种子优先：种子命中即合并，绝不联网；只有种子缺失/覆盖不足的板块才走东财。
 
 设计（本地纯增量、不碰现有数据）：
   · 本地已有且末日期 >= 市场最新交易日的板块 → 直接跳过，一根不动。
     因此本机/已在跑的实例执行本脚本几乎全部跳过，零副作用。
-  · 仅对「缺失 / 落后 / 历史不足」的板块抓东财 BK 日 K，按日期并集合并。
-  · 单板块抓到的有效根数 < MIN_BARS 时不覆盖该板块（防止半截脏数据冲掉历史）。
-  · 东财被熔断时整批快速失败，不逐个硬撞；已抓到的照常写，缺失的保留原样。
+  · 待补板块先查静态种子，命中且根数足够 → 按日期并集合并（零网络）。
+  · 种子未覆盖的板块才抓东财 BK 日 K；单板块有效根数 < MIN_BARS 不覆盖。
+  · 连续失败 STREAK_LIMIT 次才暂停，成功即清零，支持断点续跑。
   · 全程原子写 klines.json；任一步异常都不会损坏现有文件。
 
 用法（在 backend/ 目录）：
-  python -m jobs.fetch_sector_klines                 # 增量补齐（只补缺/旧/不足）
+  python -m jobs.fetch_sector_klines                 # 增量补齐（种子优先，只补缺/旧/不足）
+  python -m jobs.fetch_sector_klines --no-seed       # 跳过种子，强制走东财
   python -m jobs.fetch_sector_klines --dry-run       # 只报告待补清单，不抓不写
   python -m jobs.fetch_sector_klines --force         # 忽略新鲜度，重抓全部板块
   python -m jobs.fetch_sector_klines --min 60        # 自定义历史充足阈值
@@ -41,6 +45,9 @@ META_FILE = os.path.join(RAW, "sectors_meta.json")
 # 优先实例目录（运维若手动刷新过），否则回落默认入仓目录。
 MAP_FILE = os.path.join(RAW, "sector_bk_map.json")
 MAP_FILE_FALLBACK = os.path.join(DEFAULT_DATA_DIR, "raw", "sector_bk_map.json")
+# 静态 K 线种子（随代码入仓）：与映射种子同样优先实例目录、回落默认入仓目录
+SEED_FILE = os.path.join(RAW, "sector_klines_seed.json")
+SEED_FILE_FALLBACK = os.path.join(DEFAULT_DATA_DIR, "raw", "sector_klines_seed.json")
 LOG_DIR = os.path.join(DATA_DIR, "logs")
 
 MIN_BARS = 60           # 少于此根数视为历史不足，需要补齐
@@ -118,6 +125,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="补齐申万二级板块日K（东财BK源）")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--no-seed", action="store_true", help="跳过静态种子，强制走东财")
     ap.add_argument("--min", type=int, default=MIN_BARS)
     ap.add_argument("--limit", type=int, default=FULL_LIMIT)
     ap.add_argument("--only", default="")
@@ -140,7 +148,21 @@ def main(argv=None) -> int:
     only = {c.strip().lower() for c in args.only.split(",") if c.strip()} or None
     store = load_store()
     mdate = market_date(store)
-    log(f"本地标的 {len(store)} · 市场最新交易日 {mdate} · 映射种子 {len(bk_map)} 条", fh)
+
+    # 静态种子：优先实例目录，回落默认入仓目录；读失败/禁用则为空
+    seed: dict[str, list[dict]] = {}
+    seed_asof = ""
+    if not args.no_seed:
+        sdoc = _read(SEED_FILE) or _read(SEED_FILE_FALLBACK) or {}
+        seed_raw = sdoc.get("map") or {}
+        seed_asof = sdoc.get("asof") or ""
+        for c, v in seed_raw.items():
+            nodes = v.get("nodes") if isinstance(v, dict) else v
+            bars = [b for b in (nodes or []) if b.get("date")]
+            if len(bars) >= args.min:
+                seed[c] = bars
+    log(f"本地标的 {len(store)} · 市场最新交易日 {mdate} · 映射种子 {len(bk_map)} 条 · "
+        f"静态种子 {len(seed)} 板块(末{seed_asof or '无'}){' [已禁用]' if args.no_seed else ''}", fh)
 
     # 划分待办：已有且新鲜且历史足 → 跳过；其余 → 待补
     todo, skip = [], []
@@ -178,36 +200,48 @@ def main(argv=None) -> int:
     from datasource import sectorflow
 
     got, failed, short = 0, 0, 0
-    streak = 0                      # 连续失败计数：单个板块偶发失败跳过即可，连续多失败才判定上游不可用
-    STREAK_LIMIT = 5                # 连续 5 个失败才暂停整批（避免一个坏 BK 或一次抖动打断 124 个）
+    from_seed = 0                   # 本次由静态种子补齐的板块数（零网络）
+    streak = 0                      # 连续失败计数（仅东财抓取路径）：单个板块偶发失败跳过即可
+    STREAK_LIMIT = 5
     for i, (pt, bk, n) in enumerate(todo, 1):
-        fresh = sectorflow.fetch_bk_kline(bk, limit=args.limit)
+        src = "种子"
+        fresh = seed.get(pt) or []
+        if not fresh:
+            src = "东财"
+            fresh = sectorflow.fetch_bk_kline(bk, limit=args.limit)
         if len(fresh) < args.min:
             short += 1
-            streak += 1
-            why = (sectorflow._MEM.get("last_kline_error") or "").strip()
-            extra = f"；上游异常：{why}" if why else ""
-            log(f"   [{i}/{len(todo)}] {pt}←{bk} 仅 {len(fresh)} 根(<{args.min})，"
+            if src == "东财":
+                streak += 1
+                why = (sectorflow._MEM.get("last_kline_error") or "").strip()
+                extra = f"；上游异常：{why}" if why else ""
+            else:
+                streak = 0          # 种子路径不消耗上游配额
+                extra = ""
+            log(f"   [{i}/{len(todo)}] {pt}←{bk} [{src}] 仅 {len(fresh)} 根(<{args.min})，"
                 f"保留本地 {n} 根（连续失败 {streak}）{extra}", fh)
-            if streak >= STREAK_LIMIT:
+            if src == "东财" and streak >= STREAK_LIMIT:
                 log(f"   [{i}/{len(todo)}] 连续 {streak} 个失败，判定上游不可用，"
                     f"剩余 {len(todo)-i} 个跳过并保留原数据；下次重跑从未补的继续", fh)
                 failed += len(todo) - i
                 break
-            # 指数退避：失败越多歇越久，给上游降温和自适应（第1次0.5s→第4次4s）
-            time.sleep(min(0.5 * (2 ** (streak - 1)), 8))
+            if src == "东财":
+                time.sleep(min(0.5 * (2 ** (streak - 1)), 8))
             continue
         streak = 0                  # 成功即清零
         store[pt] = merge_bars(store.get(pt), fresh)
         got += 1
-        log(f"   [{i}/{len(todo)}] {pt}←{bk} {len(fresh)} 根 → 合并后 {len(store[pt])} 根"
+        if src == "种子":
+            from_seed += 1
+        else:
+            time.sleep(0.15)
+        log(f"   [{i}/{len(todo)}] {pt}←{bk} [{src}] {len(fresh)} 根 → 合并后 {len(store[pt])} 根"
             f" (末 {store[pt][-1]['date']})", fh)
-        time.sleep(0.15)
 
     if got:
         save_store(store)
-        log(f"③ 写入 {KLINE_FILE}：本次补齐 {got} 个板块 · 历史不足保留 {short} · "
-            f"失败/熔断 {failed}", fh)
+        log(f"③ 写入 {KLINE_FILE}：本次补齐 {got} 个板块（种子 {from_seed} · 东财 {got-from_seed}）· "
+            f"历史不足保留 {short} · 失败/熔断 {failed}", fh)
     else:
         log(f"③ 无板块补齐成功（不足 {short} · 失败 {failed}），klines.json 未改动", fh)
 

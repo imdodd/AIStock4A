@@ -6,6 +6,7 @@ backend/data/*
 backend/data/raw/*
 !backend/data/raw/sectors_meta.json
 !backend/data/raw/sector_bk_map.json
+!backend/data/raw/sector_klines_seed.json
 # 开箱样例：公开大市值股的空白样例持仓（仅让首屏有演示数据，用户在界面删除后填自己的）
 !backend/data/portfolio/
 backend/data/portfolio/*
