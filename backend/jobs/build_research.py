@@ -83,6 +83,13 @@ def main(argv=None) -> int:
     ap.add_argument("--no-inspect", action="store_true", help="跳过重大公告巡检")
     a = ap.parse_args(argv)
 
+    # 开源版默认不带 data/.secrets/llm.json。没有模型通道时生成模板档案即可，
+    # 不该让 EOD 第 ⑨ 步整步 FAIL（V2 配了密钥时行为不变）。
+    import ai
+    no_llm = not bool(ai.config())
+    if no_llm:
+        log("○ 未配置模型通道，本轮按 fallback 生成基础档案（不调用模型）")
+
     t0 = time.time()
     if a.only:
         targets = [a.only]
@@ -96,7 +103,7 @@ def main(argv=None) -> int:
 
     def run_one(code, kind="resident", force=False):
         try:
-            return code, research.generate(code, force=force, kind=kind)
+            return code, research.generate(code, force=force, kind=kind, skip_llm=no_llm)
         except Exception as e:
             return code, {"code": code, "error": f"{type(e).__name__}: {e}"}
 

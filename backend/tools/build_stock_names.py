@@ -79,5 +79,69 @@ def build() -> dict:
     return payload
 
 
+def _save_payload(items: list[dict], total: int, source: str, **extra) -> dict:
+    items = sorted(items, key=lambda x: x["code"])
+    payload = {"as_of": time.strftime("%Y-%m-%d %H:%M:%S"), "source": source,
+               "total_expected": total, "count": len(items), "items": items}
+    payload.update(extra)
+    os.makedirs(os.path.dirname(OUT), exist_ok=True)
+    with open(OUT, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=1)
+    print(f"[stock_names] {source} 写入 {OUT}：{len(items)} 只", flush=True)
+    return payload
+
+
+def _fallback_tencent() -> dict:
+    """东财 502/限流时用腾讯 hy2 的 124 个申万二级成分股拼出名称表。"""
+    import re
+    from datasource.tencent import TencentSource
+    from config.universe import sector_codes, names as universe_names
+
+    stock_code = re.compile(r"^(sh|sz|bj)\d{6}$")
+    src = TencentSource()
+    out, seen, failed = [], set(), 0
+    for pt in sector_codes():
+        try:
+            rows = src.sector_members(pt) or []
+        except Exception:
+            failed += 1
+            continue
+        for x in rows:
+            code = str(x.get("code") or "")
+            name = str(x.get("name") or "").strip()
+            if not stock_code.match(code) or not name or code in seen:
+                continue
+            seen.add(code)
+            out.append({"code": code, "name": name})
+    for code, name in (universe_names() or {}).items():
+        if stock_code.match(code) and name and code not in seen:
+            seen.add(code)
+            out.append({"code": code, "name": name})
+    if not out:
+        raise RuntimeError("腾讯兜底也没有拿到任何名称")
+    return _save_payload(out, len(out), "tencent_hy2", failed_sectors=failed)
+
+
+def _fallback_minimal() -> dict:
+    """最后兜底：只写持仓 / 自选 / 板块名，保证搜索索引不空。"""
+    import re
+    from config.universe import names as universe_names
+    stock_code = re.compile(r"^(sh|sz|bj)\d{6}$")
+    out = [{"code": c, "name": n} for c, n in (universe_names() or {}).items()
+           if stock_code.match(c) and n]
+    return _save_payload(out, len(out), "universe_minimal")
+
+
 if __name__ == "__main__":
-    build()
+    try:
+        build()
+    except Exception as e:  # 东财 502 很常见，不能让 EOD 第 ④ 步直接 FAIL
+        print(f"[stock_names] 东财抓取失败：{type(e).__name__}: {e}，切换腾讯兜底", flush=True)
+        try:
+            _fallback_tencent()
+        except Exception as e2:
+            print(f"[stock_names] 腾讯兜底失败：{type(e2).__name__}: {e2}", flush=True)
+            if os.path.exists(OUT):
+                print("[stock_names] 保留既有名称表，EOD 继续", flush=True)
+            else:
+                _fallback_minimal()

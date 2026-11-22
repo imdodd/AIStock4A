@@ -135,6 +135,14 @@ def main():
             continue
         r = process(code, name, "sector")
         if not r:
+            # 板块指数历史不足时（全新安装时腾讯 pt 只回 1 根 K 线）也要保留
+            # 板块条目，否则 sectors.json 为空会让下游行业映射/成分股/关注池
+            # 整条链失效。指标先用种子里的静态值，等 K 线攒够再自动转正。
+            sectors.append(dict(code=code, name=name, stage=meta.get("stage"), sub=meta.get("sub"),
+                                sub_confirmed=meta.get("sub"),
+                                has_chart=False, price=None, chg=0, rs60=meta["rs60"],
+                                dev30=meta["dev30"], dev250=meta["dev250"],
+                                slope_5w=meta["slope"], dist52=meta["dist52"], changed=None))
             continue
         l = r["last"]
         last_chg = [t for t in r["trans"] if t["frm"]][-1:] or [{}]

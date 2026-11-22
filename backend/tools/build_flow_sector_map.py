@@ -35,6 +35,7 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, HERE)
 
 from datasource.sectorflow import CLIST_URL, _get, _norm_name, ranking  # noqa: E402
+from datasource.tencent import TencentSource  # noqa: E402
 
 SNAP = os.path.join(DATA_DIR, "snapshot")
 MAP_FILE = os.path.join(SNAP, "flow_sector_map.json")
@@ -43,7 +44,21 @@ PARENT_MIN_COVER = 0.50
 
 
 def fetch_members(bk: str) -> dict:
-    """东财板块成分股（f12 六位代码 / f14 名称），pz 单页上限 100，需翻页。"""
+    """行业成分股；东财 BK 走 clist 翻页，腾讯 PT 直接走 hy2 板块接口。"""
+    # 东财不可用时 ranking() 会回落到腾讯 hy2，行里的 bk 是 PT01801xxx，
+    # 拿它去请求 b:PT01801xxx 必然全失败。这一类直接用腾讯成分股接口。
+    if str(bk).upper().startswith("PT"):
+        pairs, seen = [], set()
+        for x in (TencentSource().sector_members(str(bk).lower()) or []):
+            six = str(x.get("code") or "")[-6:]
+            if len(six) != 6 or not six.isdigit() or six in seen:
+                continue
+            seen.add(six)
+            pairs.append((six, str(x.get("name") or "")))
+        return {"codes": [c for c, _ in pairs], "names": [n for _, n in pairs],
+                "total": len(pairs)}
+
+    # 东财板块成分股（f12 六位代码 / f14 名称），pz 单页上限 100，需翻页。
     codes, names, total, pn = [], [], None, 1
     while pn <= 8:
         q = ("?pn=%d&pz=100&po=1&np=1&fltt=2&invt=2&fid=f3"
@@ -65,9 +80,23 @@ def fetch_members(bk: str) -> dict:
 
 def load_local() -> tuple[dict, dict]:
     """本地 124 个行业：归一化名 → pt，以及 六位代码 → [pt]。"""
-    with open(os.path.join(SNAP, "sectors.json"), encoding="utf-8") as f:
-        d = json.load(f)
-    items = d if isinstance(d, list) else d.get("items", [])
+    sp = os.path.join(SNAP, "sectors.json")
+    items = []
+    if os.path.exists(sp):
+        try:
+            d = json.load(open(sp, encoding="utf-8"))
+            items = d if isinstance(d, list) else (d.get("items") or [])
+        except Exception:
+            items = []
+    if not items:
+        # 全新安装的 sectors.json 可能还是空的（板块 K 线不足），退回仓库种子
+        mp = os.path.join(DATA_DIR, "raw", "sectors_meta.json")
+        try:
+            d = json.load(open(mp, encoding="utf-8"))
+            items = [dict(code=k, name=(v or {}).get("name"))
+                     for k, v in d.items() if isinstance(v, dict)]
+        except Exception:
+            items = []
     by_name = {_norm_name(s["name"]): s for s in items if s.get("name")}
     rev = defaultdict(set)
     for path in glob.glob(os.path.join(SNAP, "members", "pt*.json")):
