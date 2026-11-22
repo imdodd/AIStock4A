@@ -124,7 +124,19 @@ def main(argv=None) -> int:
         # ---- 第一步：先抓指数，确定最新交易日
         index_codes = list(universe.INDEX_META)
         log("① 抓取指数确定最新交易日 …", fh)
-        idx_data = src.fetch_kline(index_codes, limit=INC_LIMIT if not args.force else 60)
+        # 阶段计算依赖 MA250（250 根）+ slope 回看，至少需要 276 根。
+        # 全新安装时本地指数为空或只有 60 根，若仍按增量抓 60，compute_series
+        # 永远算不出序列，build_snapshot 会把四大指数整块丢弃。
+        # 因此对历史不足的指数改抓全量 500 根，够窗口的才走增量。
+        need_full = [c for c in index_codes if len(store.get(c) or []) < 276]
+        if need_full:
+            log(f"   指数历史不足（{len(need_full)} 个），全量抓 {FULL_LIMIT} 根…", fh)
+        idx_data = {}
+        if need_full:
+            idx_data.update(src.fetch_kline(need_full, limit=FULL_LIMIT) or {})
+        rest = [c for c in index_codes if c not in need_full]
+        if rest:
+            idx_data.update(src.fetch_kline(rest, limit=INC_LIMIT) or {})
         merge(store, idx_data)
         market_date = max((bars[-1]["date"] for bars in idx_data.values()), default=None)
         if not market_date:

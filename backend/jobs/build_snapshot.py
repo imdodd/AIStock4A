@@ -84,7 +84,8 @@ def main():
     stu = json.load(open(os.path.join(RAW, "stocks_meta.json"), encoding="utf-8")) if os.path.exists(os.path.join(RAW, "stocks_meta.json")) else {}
     os.makedirs(CHARTS, exist_ok=True)
 
-    bench_rows = norm(raw["sh000300"]["nodes"])
+    # 基准容错：全新安装若沪深300尚未落盘，不能让整个快照构建崩掉。
+    bench_rows = norm(raw["sh000300"]["nodes"]) if raw.get("sh000300") else []
     bench = {r["date"]: r["close"] for r in bench_rows}
 
     charts, sectors, signals_all, trans_all, index_cards = {}, [], [], [], []
@@ -109,6 +110,21 @@ def main():
             continue
         r = process(code, name, "index")
         if not r:
+            # 历史不足（全新安装时指数只有 60 根，算不出 MA250）时保留占位卡片：
+            # 至少显示最新点位与涨跌幅，阶段/指标留空由前端标「数据积累中」，
+            # 否则四大指数整块消失，用户会误以为功能坏了。数据攒够后自动转正。
+            nodes = norm(raw[code]["nodes"]) if raw.get(code) else []
+            last = nodes[-1] if nodes else None
+            prev = nodes[-2] if len(nodes) >= 2 else None
+            index_cards.append(dict(
+                code=code, name=name,
+                price=(last["close"] if last else None),
+                chg=(round((last["close"] / prev["close"] - 1) * 100, 2)
+                     if last and prev and prev.get("close") else None),
+                sub=None, sub_confirmed=None, stage=None, stage_name="数据积累中",
+                rs60=None, dev250=None, slope_5w=None, dist52=None, ma250=None,
+                no_data=True,
+            ))
             continue
         l = r["last"]
         index_cards.append(dict(
@@ -117,6 +133,7 @@ def main():
             sub=l["sub"], sub_confirmed=confirmed_sub(r["series"], 3), stage=l["stage"],
             stage_name=STAGE_NAME[l["stage"]], rs60=l["rs60"], dev250=l["dev250"],
             slope_5w=l["slope_5w"], dist52=l["dist52"], ma250=l["ma250"],
+            no_data=False,
         ))
         recent = [t for t in r["trans"] if t["frm"] is None or t["date"] >= r["series"][-160]["date"]]
         for t in recent[-6:]:

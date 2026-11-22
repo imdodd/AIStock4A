@@ -2676,6 +2676,15 @@
   function renderIndexPosSummary(indices) {
     const box = $('#indexPosSummary');
     if (!box || !indices || !indices.length) return;
+    // 数据积累中的指数没有阶段，不参与仓位计算；若全部无数据则给出提示。
+    const valid = indices.filter(i => i.stage && !i.no_data);
+    if (!valid.length) {
+      box.className = 'idx-pos-summary s1';
+      box.title = '四大指数历史数据不足（需 250+ 根日K），正在积累，请稍后重跑 EOD。';
+      box.innerHTML = `<span class="lead">四大指数综合仓位</span><span class="big">—</span><span class="act">数据积累中</span>`;
+      return;
+    }
+    indices = valid;
     // 综合仓位取四大指数建议区间的交集：下限取最大、上限取最小，宁可保守。
     // 若交集为空（指数阶段分歧过大），退化为各自中值的均值，避免给出空区间。
     const ps = indices.map(stagePos);
@@ -2708,7 +2717,15 @@
     const m = S.market;
     $('#indexCards').innerHTML = m.indices.map(i => {
       const pos = stagePos(i);
-      return `
+      return i.no_data ? `
+      <div class="card">
+        <div class="name">
+          <span class="nm-l">${i.name}<span class="badge s4">数据积累中</span></span>
+        </div>
+        <div class="price ${upDown(i.chg)}">${fmt(i.price)}</div>
+        <div class="chg ${upDown(i.chg)}">${pct(i.chg)}</div>
+        <div class="metrics" style="display:block;color:var(--muted)">历史数据不足 250 根，重跑 EOD 后自动显示阶段与仓位</div>
+      </div>` : `
       <div class="card">
         <div class="name">
           <span class="nm-l">${i.name}${badge(i.stage, i.sub, i.sub_confirmed)}</span>
