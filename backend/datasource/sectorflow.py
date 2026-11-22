@@ -54,7 +54,8 @@ RANK_CACHE = os.path.join(CACHE_DIR, "sectorflow_rank.json")
 HIST_CACHE_DIR = os.path.join(CACHE_DIR, "sectorflow_hist")
 
 BREAK_SECONDS = 600          # 上游失败后静默 10 分钟，期间只读缓存
-_MEM: dict = {"rank": (0.0, None), "hist": {}, "tx": (0.0, None)}
+_MEM: dict = {"rank": (0.0, None), "hist": {}, "tx": (0.0, None),
+              "prefer_curl": False, "last_kline_error": ""}
 _BREAK: dict = {"until": 0.0, "why": "", "hits": 0}
 
 
@@ -63,16 +64,18 @@ _BREAK: dict = {"until": 0.0, "why": "", "hits": 0}
 def _get(url: str, timeout: int = 8, retry: int = 1, headers: dict | None = None) -> dict:
     hdrs = headers or UA
     last = None
-    for i in range(retry + 1):
-        try:
-            req = urllib.request.Request(url, headers=hdrs)
-            with urllib.request.urlopen(req, timeout=timeout) as r:
-                return json.loads(r.read().decode("utf-8", "replace"))
-        except Exception as e:  # noqa: BLE001
-            last = e
-            time.sleep(0.4 * (i + 1))
-    # urllib 全部失败后回落 curl：实测存在「curl 通、urllib 被 RemoteDisconnected」的环境
-    # （TLS/HTTP 栈特征差异）。urllib 成功时完全不走这里，零开销、零行为变化。
+    # 一旦确认本机 urllib 被上游掐、curl 可用（prefer_curl），后续直接用 curl：
+    # 避免每个请求都白白重试 urllib 2 次才走 curl（实测每板块从 4~5s 降到 <1s，
+    # 请求数从 3 次降到 1 次——高频双倍请求会把东财推到限流，才是熔断的真正诱因）。
+    if not _MEM.get("prefer_curl"):
+        for i in range(retry + 1):
+            try:
+                req = urllib.request.Request(url, headers=hdrs)
+                with urllib.request.urlopen(req, timeout=timeout) as r:
+                    return json.loads(r.read().decode("utf-8", "replace"))
+            except Exception as e:  # noqa: BLE001
+                last = e
+                time.sleep(0.4 * (i + 1))
     try:
         cmd = ["curl", "-sS", "--max-time", str(max(5, timeout))]
         for k, v in hdrs.items():
@@ -80,6 +83,7 @@ def _get(url: str, timeout: int = 8, retry: int = 1, headers: dict | None = None
         cmd.append(url)
         p = subprocess.run(cmd, capture_output=True, timeout=max(12, timeout + 4))
         if p.returncode == 0 and p.stdout:
+            _MEM["prefer_curl"] = True
             return json.loads(p.stdout.decode("utf-8", "replace"))
     except Exception as e:  # noqa: BLE001
         last = e
@@ -363,7 +367,10 @@ def fetch_bk_kline(bk: str, limit: int = 500) -> list[dict]:
         bars.sort(key=lambda x: x["date"])
         return bars
     except Exception as e:  # noqa: BLE001
-        _trip(f"东财 kline {bk} {type(e).__name__}: {e}")
+        # 单个板块失败不触发全局熔断：批量补齐时某个 BK 偶发断连不该让剩余全部跳过。
+        # 只记录原因返回空，由调用方按「连续失败 N 次」自行决定暂停。
+        msg = f"东财 kline {bk} {type(e).__name__}: {e}"
+        _MEM["last_kline_error"] = msg[:200]
         return []
 
 

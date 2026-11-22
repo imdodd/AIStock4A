@@ -178,22 +178,26 @@ def main(argv=None) -> int:
     from datasource import sectorflow
 
     got, failed, short = 0, 0, 0
+    streak = 0                      # 连续失败计数：单个板块偶发失败跳过即可，连续多失败才判定上游不可用
+    STREAK_LIMIT = 5                # 连续 5 个失败才暂停整批（避免一个坏 BK 或一次抖动打断 124 个）
     for i, (pt, bk, n) in enumerate(todo, 1):
-        st = sectorflow.upstream_state()
-        if st["blocked"]:
-            log(f"   [{i}/{len(todo)}] 东财已熔断（原因：{st.get('why') or '未知'}；"
-                f"{st.get('retry_in')}s 后自动重试），剩余 {len(todo)-i+1} 个跳过并保留原数据", fh)
-            failed += len(todo) - i + 1
-            break
         fresh = sectorflow.fetch_bk_kline(bk, limit=args.limit)
         if len(fresh) < args.min:
             short += 1
-            st = sectorflow.upstream_state()
-            # 抓到 0 根往往是因为请求抛异常触发了熔断，把真实原因带出来，避免只看到「熔断」二字
-            extra = f"；上游异常：{st['why']}" if st["blocked"] else ""
+            streak += 1
+            why = (sectorflow._MEM.get("last_kline_error") or "").strip()
+            extra = f"；上游异常：{why}" if why else ""
             log(f"   [{i}/{len(todo)}] {pt}←{bk} 仅 {len(fresh)} 根(<{args.min})，"
-                f"保留本地 {n} 根{extra}", fh)
+                f"保留本地 {n} 根（连续失败 {streak}）{extra}", fh)
+            if streak >= STREAK_LIMIT:
+                log(f"   [{i}/{len(todo)}] 连续 {streak} 个失败，判定上游不可用，"
+                    f"剩余 {len(todo)-i} 个跳过并保留原数据；下次重跑从未补的继续", fh)
+                failed += len(todo) - i
+                break
+            # 指数退避：失败越多歇越久，给上游降温和自适应（第1次0.5s→第4次4s）
+            time.sleep(min(0.5 * (2 ** (streak - 1)), 8))
             continue
+        streak = 0                  # 成功即清零
         store[pt] = merge_bars(store.get(pt), fresh)
         got += 1
         log(f"   [{i}/{len(todo)}] {pt}←{bk} {len(fresh)} 根 → 合并后 {len(store[pt])} 根"
