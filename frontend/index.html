@@ -200,6 +200,7 @@
   html[data-theme="light"] .nc-tag i.bear{color:var(--down)}
   html[data-theme="light"] .nc-impact.flat{color:var(--muted)}
   html[data-theme="light"] .nc-impact.mix{color:#8a5a00}
+  html[data-theme="light"] .nc-en{background:rgba(255,107,26,.1);border-color:rgba(255,107,26,.4);color:#8a5a00}
   html[data-theme="light"] .nc-logic{color:var(--metric)}
   html[data-theme="light"] .nc-logic b{color:var(--text)}
   html[data-theme="light"] .nc-orig{background:rgba(255,107,26,.04)}
@@ -543,6 +544,8 @@
   .nc-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:10px;color:var(--muted)}
   .nc-cat{background:rgba(77,141,255,.16);border:1px solid rgba(77,141,255,.4);color:var(--softblue);
     border-radius:5px;padding:1px 7px;font-size:10px}
+  .nc-en{background:rgba(245,166,35,.14);border:1px solid rgba(245,166,35,.45);color:#f5c876;
+    border-radius:5px;padding:1px 7px;font-size:10px;font-weight:600}
   .nc-impact{border-radius:5px;padding:1px 7px;font-size:10px;font-weight:600}
   .nc-impact.bull{background:rgba(255,92,92,.14);color:#ff8080}
   .nc-impact.bear{background:rgba(46,204,113,.14);color:#5fd99a}
@@ -1608,6 +1611,7 @@
           <label class="news-date">日期 <select id="newsDate"></select></label>
           <div class="chips" id="newsCatFilter"></div>
           <div class="chips" id="newsImpactFilter"></div>
+          <div class="chips" id="newsLangFilter"></div>
           <button class="mini-btn" id="newsReload">↻ 重新加载</button>
         </div>
         <div class="news-summary" id="newsSummary"></div>
@@ -4155,12 +4159,13 @@
   }
 
   // ================= 消息模块（每日重要资讯 → 板块 / 个股影响） =================
-  const NEWS = { idx: null, data: null, date: null, cat: 'all', impact: 'all', loading: false, pollSig: null };
+  const NEWS = { idx: null, data: null, date: null, cat: 'all', impact: 'all', lang: 'all', loading: false, pollSig: null };
   const NEWS_CATS = [
     ['all', '全部'], ['us_stock', '美股'], ['fed', '美联储'], ['us_gov', '美国政府'],
     ['cn_policy', '国内政策'], ['commodity', '商品/汇率'], ['other', '其他'],
   ];
   const NEWS_IMPACTS = [['all', '全部'], ['利多', '利多'], ['利空', '利空'], ['中性', '中性'], ['分化', '分化']];
+  const NEWS_LANGS = [['all', '全部'], ['en', '英文原文']];
   const IMPACT_CLS = { '利多': 'bull', '利空': 'bear', '中性': 'flat', '分化': 'mix' };
   const IMPACT_COLOR = { '利多': 'var(--up)', '利空': 'var(--down)', '中性': 'var(--muted)', '分化': 'var(--s3)' };
 
@@ -4223,6 +4228,10 @@
     return en >= 12 && en > zh;
   }
 
+  function itemHasEnglish(it) {
+    return (it && it.sources || []).some(isEnglishEvidence);
+  }
+
   function newsCardHtml(it) {
     const cls = IMPACT_CLS[it.impact] || 'flat';
     const title = it.url
@@ -4239,6 +4248,7 @@
       : '';
     return `<div class="news-card ni-${cls}">
       <div class="nc-top"><span class="nc-cat">${he(it.category_name || '其他')}</span>
+        ${itemHasEnglish(it) ? '<span class="nc-en">EN 原文</span>' : ''}
         <span class="nc-impact ${cls}">${he(it.impact || '中性')}</span>
         <span>${he(it.horizon || '')} · 置信 ${he(it.confidence || '中')}</span>
         <span style="margin-left:auto">${he(it.time || '')}</span></div>
@@ -4276,6 +4286,10 @@
     $('#newsImpactFilter').innerHTML = '<span class="flabel">影响</span>' + NEWS_IMPACTS.map(([k, t]) =>
       `<button data-i="${k}" class="${NEWS.impact === k ? 'active' : ''}">${t}</button>`).join('');
     $$('#newsImpactFilter button').forEach(b => b.addEventListener('click', () => { NEWS.impact = b.dataset.i; paintNews(); }));
+    const enCount = items.filter(itemHasEnglish).length;
+    $('#newsLangFilter').innerHTML = '<span class="flabel">原文</span>' + NEWS_LANGS.map(([k, t]) =>
+      `<button data-l="${k}" class="${NEWS.lang === k ? 'active' : ''}">${t}${k === 'en' ? ' ' + enCount : ''}</button>`).join('');
+    $$('#newsLangFilter button').forEach(b => b.addEventListener('click', () => { NEWS.lang = b.dataset.l; paintNews(); }));
 
     // 新增批次可能包含「刚发现但发布时间较早」的稿件；消息列表按原文发布时间排序，
     // 不能按合并时的置顶顺序展示，否则第一行会出现 11-16 这类旧稿。
@@ -4286,9 +4300,11 @@
       return Number.isFinite(t) ? t : 0;
     };
     const shown = items.filter(x => (NEWS.cat === 'all' || x.category === NEWS.cat)
-      && (NEWS.impact === 'all' || x.impact === NEWS.impact))
+      && (NEWS.impact === 'all' || x.impact === NEWS.impact)
+      && (NEWS.lang === 'all' || (NEWS.lang === 'en' && itemHasEnglish(x))))
       .slice().sort((a, b) => newsTimeMs(b) - newsTimeMs(a));
-    $('#newsListHint').textContent = `共 ${items.length} 条 · 当前显示 ${shown.length} 条`;
+    $('#newsListHint').textContent = `共 ${items.length} 条 · 当前显示 ${shown.length} 条`
+      + (enCount ? ` · 带英文原文 ${enCount} 条` : '');
     $('#newsList').innerHTML = shown.length
       ? shown.map(newsCardHtml).join('')
       : '<div class="news-empty">当前筛选下没有资讯，换个类别或影响方向试试。</div>';
