@@ -72,19 +72,35 @@ def _parse_item_time(value: str):
 
 
 def _freshness_floor(day: str):
-    """消息板只允许最近两日内发布的稿件，更早的按旧闻拒绝。"""
+    """消息板只收采集日当天及前一天发布的稿件，更早的按旧闻拒绝。
+
+    原来放宽到 2 天，是为了让周末能兜住周五的存量；实测发现周末检索词若
+    锚定到旧日期，整批 2 天前的旧闻会被当成「新鲜」入库，污染当日简报。
+    收紧到 1 天后：周末两点之间的真新闻（政策/海外/公告）仍能进，跨了两天
+    以上的旧行情解读会被拒。窗口可用 NEWS_FRESH_DAYS 覆盖。
+    """
     base = datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=CN_TZ)
-    return base - timedelta(days=2)
+    days = max(0, int(os.environ.get("NEWS_FRESH_DAYS", "1") or 1))
+    return base - timedelta(days=days)
 # 联网工具只在 deepseek-flash 上开放；允许用环境变量显式覆盖以适配后续模型名变更。
 SEARCH_MODEL = (os.environ.get("LLM_WEBSEARCH_MODEL") or "deepseek-flash").strip()
 TIMEOUT = 180
 
-# 查询词模板：生产三类 + 宏观经济一类。官方媒体的世界经济/货币政策报道对判断大局
-# 有价值（用户 2026-11-20 明确），即使不直接点名 A 股也要搜、要留。
+# 查询词模板必须把「今天/今日/最新」锚定到采集日的具体日期——LLM 直接看到
+# 「今日」会自行脑补成搜索结果里出现的旧日期（实测把 22 日采集锚成了 20 日），
+# 导致整批旧闻回填当日简报。非交易日照样有政策/海外/公告增量，单独给一套词。
 SEARCH_RECIPE = (
-    "先搜「A股 今日 板块 异动 原因」，再搜「世界经济 美联储 货币政策 最新」这类宏观"
-    "主题；再对查询范围里每只个股搜「<个股名> 公告」；"
-    "再对 Stage1/Stage2 重点行业搜「<行业名> 最新消息」。"
+    "每条查询都必须带上采集日的具体日期，禁止用搜索结果里看到的其它日期替换。"
+    "交易日：先搜「A股 {day_cn} 板块 异动 原因」，再搜「世界经济 美联储 货币政策 {day_cn}」"
+    "这类宏观主题；再对查询范围里每只个股搜「<个股名> {day_cn} 公告」；"
+    "再对 Stage1/Stage2 重点行业搜「<行业名> {day_cn} 最新消息」。"
+)
+WEEKEND_RECIPE = (
+    "每条查询都必须带上采集日的具体日期，禁止用搜索结果里看到的其它日期替换。"
+    "非交易日同样有真新闻要采：先搜「{day_cn} 政策发布 国务院 证监会 央行」与"
+    "「{day_cn} 海外市场 美股 美联储 最新」；再搜「<个股名> {day_cn} 公告」与"
+    "「下周 A股 展望 {day_cn}」；对重点行业搜「<行业名> {day_cn} 消息」。"
+    "不要搜「板块异动原因」这类交易日模板——周末没有盘中异动。"
 )
 
 
@@ -103,14 +119,18 @@ def _build_prompt(day: str, sectors: list[dict], stocks: list[dict],
     query_names = "、".join(s["name"] for s in sectors[:16]) or "（无）"
     sector_hint = "、".join(f"{s['code']}={s['name']}" for s in sectors) or "（无）"
     floor = _freshness_floor(day).strftime("%Y-%m-%d %H:%M")
-    return f"""你是 A 股资讯的增量判断器。采集日 {day}（交易日与非交易日一视同仁）。
+    dt = datetime.strptime(day, "%Y-%m-%d")
+    day_cn = f"{dt.year}年{dt.month}月{dt.day}日"
+    is_weekend = dt.weekday() >= 5
+    recipe = (WEEKEND_RECIPE if is_weekend else SEARCH_RECIPE).replace("{day_cn}", day_cn)
+    return f"""你是 A 股资讯的增量判断器。采集日 {day_cn}（交易日与非交易日一视同仁）。
 周末与节假日同样要采集：政策发布、海外市场、公司公告常在非交易日出现，周一开盘前必须已在库里。
 用联网搜索采集确有增量的资讯。
 
 查询范围：个股（{stock_hint}）；行业（{query_names} 等 Stage1/Stage2 行业）；
 大局（国内外宏观经济、世界经济、货币政策、海外市场——官方媒体这类报道即使不点名 A 股
 也对本系统判断大盘有价值，必须保留，不许当「与 A 股无关」剔除）。
-搜索方式：{SEARCH_RECIPE}
+搜索方式：{recipe}
 只保留对大局 / 板块 / 个股确有增量的新闻，最多 6 条。只输出一个 JSON 对象，不要解释文字。
 
 输出格式：
@@ -136,10 +156,13 @@ sources[].snippet 里逐字找到。snippet 从搜索结果摘要里完整摘录
 
 硬约束 3：stocks[].code 必须从查询范围的个股里选，不许编造。
 
-硬约束 4：time 必须是原文发布时间，且不得早于 {floor}。旧公告、旧研报、旧处罚、
-旧行情解读即使第一次搜到也不算增量；宁可返回 items: []，不要把旧闻翻炒成新消息。
+  硬约束 4：time 必须是原文发布时间，且不得早于 {floor}。旧公告、旧研报、旧处罚、
+  旧行情解读即使第一次搜到也不算增量；宁可返回 items: []，不要把旧闻翻炒成新消息。
+  特别注意：你的检索词里若出现不是 {day_cn} 的日期（例如从搜索结果里抄来的旧日期），
+  立刻改成 {day_cn} 重新搜。日期锚点只能是采集日 {day_cn}，一天都不许前移。
 
-硬约束 5：没有实质增量就返回 items: []。"""
+  硬约束 5：没有实质增量就返回 items: []。非交易日的政策/海外/公告若有增量照常收录，
+  但如果翻来覆去只有 {floor[:10]} 之前的旧稿，就返回 items: []，不要拿旧闻填空。"""
 
 
 def _extract_json(text: str) -> dict | None:
