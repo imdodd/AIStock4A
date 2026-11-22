@@ -179,14 +179,20 @@ def main(argv=None) -> int:
 
     got, failed, short = 0, 0, 0
     for i, (pt, bk, n) in enumerate(todo, 1):
-        if sectorflow.upstream_state()["blocked"]:
-            log(f"   [{i}/{len(todo)}] 东财已熔断，剩余 {len(todo)-i+1} 个跳过并保留原数据", fh)
+        st = sectorflow.upstream_state()
+        if st["blocked"]:
+            log(f"   [{i}/{len(todo)}] 东财已熔断（原因：{st.get('why') or '未知'}；"
+                f"{st.get('retry_in')}s 后自动重试），剩余 {len(todo)-i+1} 个跳过并保留原数据", fh)
             failed += len(todo) - i + 1
             break
         fresh = sectorflow.fetch_bk_kline(bk, limit=args.limit)
         if len(fresh) < args.min:
             short += 1
-            log(f"   [{i}/{len(todo)}] {pt}←{bk} 仅 {len(fresh)} 根(<{args.min})，保留本地 {n} 根", fh)
+            st = sectorflow.upstream_state()
+            # 抓到 0 根往往是因为请求抛异常触发了熔断，把真实原因带出来，避免只看到「熔断」二字
+            extra = f"；上游异常：{st['why']}" if st["blocked"] else ""
+            log(f"   [{i}/{len(todo)}] {pt}←{bk} 仅 {len(fresh)} 根(<{args.min})，"
+                f"保留本地 {n} 根{extra}", fh)
             continue
         store[pt] = merge_bars(store.get(pt), fresh)
         got += 1
