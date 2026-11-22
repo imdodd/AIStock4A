@@ -64,9 +64,9 @@ _BREAK: dict = {"until": 0.0, "why": "", "hits": 0}
 def _get(url: str, timeout: int = 8, retry: int = 1, headers: dict | None = None) -> dict:
     hdrs = headers or UA
     last = None
-    # 一旦确认本机 urllib 被上游掐、curl 可用（prefer_curl），后续直接用 curl：
-    # 避免每个请求都白白重试 urllib 2 次才走 curl（实测每板块从 4~5s 降到 <1s，
-    # 请求数从 3 次降到 1 次——高频双倍请求会把东财推到限流，才是熔断的真正诱因）。
+    # urllib 重试全失败即判定本机 urllib 不可用，记住后续直连 curl。
+    # 关键：不能在「curl 成功」时才记住——上游限流时 curl 也会失败，
+    # 那样本地每次仍白试 urllib 2 次，请求翻 3 倍、每板块 4~5s，反而加重限流。
     if not _MEM.get("prefer_curl"):
         for i in range(retry + 1):
             try:
@@ -76,6 +76,7 @@ def _get(url: str, timeout: int = 8, retry: int = 1, headers: dict | None = None
             except Exception as e:  # noqa: BLE001
                 last = e
                 time.sleep(0.4 * (i + 1))
+        _MEM["prefer_curl"] = True
     try:
         cmd = ["curl", "-sS", "--max-time", str(max(5, timeout))]
         for k, v in hdrs.items():
@@ -83,8 +84,12 @@ def _get(url: str, timeout: int = 8, retry: int = 1, headers: dict | None = None
         cmd.append(url)
         p = subprocess.run(cmd, capture_output=True, timeout=max(12, timeout + 4))
         if p.returncode == 0 and p.stdout:
-            _MEM["prefer_curl"] = True
             return json.loads(p.stdout.decode("utf-8", "replace"))
+        # curl 也失败：把 stderr 带出来。之前只记 urllib 的 RemoteDisconnected，
+        # 看不出 curl 是被拒、超时还是返回空，无法区分「坏代码」与「限流」。
+        err = (p.stderr or b"").decode("utf-8", "replace").strip()
+        if err:
+            last = RuntimeError(f"curl rc={p.returncode}: {err[:120]}")
     except Exception as e:  # noqa: BLE001
         last = e
     raise last  # type: ignore[misc]
