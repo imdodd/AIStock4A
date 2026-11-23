@@ -17,11 +17,34 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 from .calendar import CN_TZ
-from .cron import next_fire, validate
+from .cron import next_fire, parse as parse_cron, validate
 
 
 def apscheduler_available() -> bool:
     return importlib.util.find_spec("apscheduler") is not None
+
+
+def crontab_to_apscheduler(expr: str) -> str:
+    """把标准 crontab 的周字段转换成 APScheduler 口径。
+
+    两套口径的歧义就出在这一段：
+      * 标准 crontab（本工程的 ``scheduler.cron``、``job_defs``、文档、
+        前端 placeholder、``EOD_CRON`` 默认值全都按这套）：0=周日，1=周一 … 5=周五；
+      * APScheduler 的 ``day_of_week``：0=周一 … 6=周日。
+
+    ``CronTrigger.from_crontab`` 名义上吃标准 crontab，实际把第 5 段原样塞进
+    ``day_of_week``，于是 ``1-5`` 变成周二到周六、``0-4`` 变成周一到周五。
+    实测过：``from_crontab('30 15 * * 1-5')`` 的下一次是**周二**。
+
+    既然文件、接口、文档都以标准 crontab 为准，就在这一层做映射，别去动
+    builtin 后端（它已经是标准的）。映射：crontab n → (n-1) % 7。
+    """
+    parts = expr.split()
+    if len(parts) != 5 or parts[4] == "*":
+        return " ".join(parts) if len(parts) == 5 else expr
+    spec = parse_cron(expr)                       # 顺带完成合法性校验
+    mapped = sorted({(d - 1) % 7 for d in spec.dow})
+    return " ".join(parts[:4] + [",".join(str(x) for x in mapped)])
 
 
 class BackendBase:
@@ -80,7 +103,7 @@ class APSchedulerBackend(BackendBase):
     def add(self, job_id: str, cron: str, callback, replace: bool = True) -> None:
         from apscheduler.triggers.cron import CronTrigger
         validate(cron)
-        trigger = CronTrigger.from_crontab(cron, timezone=CN_TZ)
+        trigger = CronTrigger.from_crontab(crontab_to_apscheduler(cron), timezone=CN_TZ)
         with self._lock:
             self._scheduler.add_job(callback, trigger=trigger, id=job_id,
                                     args=[job_id], replace_existing=replace,
@@ -105,7 +128,8 @@ class APSchedulerBackend(BackendBase):
             if not job:
                 return False
             self._scheduler.reschedule_job(
-                job_id, trigger=CronTrigger.from_crontab(cron, timezone=CN_TZ))
+                job_id, trigger=CronTrigger.from_crontab(
+                    crontab_to_apscheduler(cron), timezone=CN_TZ))
             self._crons[job_id] = " ".join(cron.split())
             return True
 
@@ -151,7 +175,8 @@ class APSchedulerBackend(BackendBase):
                 if cb is None:
                     continue
                 self._scheduler.add_job(
-                    cb, trigger=CronTrigger.from_crontab(cron, timezone=CN_TZ),
+                    cb, trigger=CronTrigger.from_crontab(
+                        crontab_to_apscheduler(cron), timezone=CN_TZ),
                     id=jid, args=[jid], replace_existing=True,
                     coalesce=True, max_instances=1)
             if was_running:
@@ -285,4 +310,4 @@ def select_backend(prefer: str = "auto", **kwargs) -> BackendBase:
 
 
 __all__ = ["BackendBase", "APSchedulerBackend", "BuiltinBackend",
-           "select_backend", "apscheduler_available"]
+           "select_backend", "apscheduler_available", "crontab_to_apscheduler"]

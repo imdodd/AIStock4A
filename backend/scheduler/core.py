@@ -18,7 +18,7 @@ from typing import Any
 from db.repository import get_repository
 from . import calendar as cal
 from .backends import BackendBase, apscheduler_available, select_backend
-from .cron import validate
+from .cron import validate, next_fire as cron_next_fire
 from .handlers import FIXED_JOBS, JOB_HANDLERS
 from .state import JobState
 
@@ -156,9 +156,17 @@ class Scheduler:
         """补跑「最近交易日缺跑」的任务；同一交易日由 job_runs 去重。
 
         周日启动也会以周五为目标，避免把「今天不是交易日」误当成「不用补」。
+
+        **当天的任务必须过了预定触发时刻才补**：EOD 现在默认会抓行情，
+        如果上午盘中重启服务就立刻补跑，会把未收盘的半成品 K 线写进
+        ``klines.json``，还会记成「今天已成功」，到 15:30 真正的收盘任务
+        反被去重跳过 —— 结果是错一整天且不报警。所以当天目标只在
+        「已过当天预定时刻」时补；没到点就交给正常调度。
         """
         results = []
         day = cal.last_trading_day().isoformat()
+        now = datetime.now(cal.CN_TZ)
+        today = now.date().isoformat()
         for j in self._fixed_defs():
             if j["dedupe"] != "trade_day":
                 continue
@@ -166,8 +174,29 @@ class Scheduler:
                 results.append({"ok": True, "skipped": "already_done",
                                 "job": j["id"], "key": day})
                 continue
+            if day == today and not self._due_today(j["cron"], now):
+                results.append({"ok": True, "skipped": "not_due_yet",
+                                "job": j["id"], "key": day,
+                                "first_fire_today": self._first_fire_today(j["cron"], now)})
+                continue
             results.append(self._run(j["id"], trade_date=day))
         return results
+
+    @staticmethod
+    def _first_fire_today(cron: str, now: datetime) -> str | None:
+        """当天该 cron 的最早触发时刻；今天不触发则返回 None。"""
+        from datetime import timedelta
+        start = datetime(now.year, now.month, now.day, tzinfo=now.tzinfo) - timedelta(minutes=1)
+        nxt = cron_next_fire(cron, start)
+        if nxt is None or nxt.date() != now.date():
+            return None
+        return nxt.isoformat()
+
+    def _due_today(self, cron: str, now: datetime) -> bool:
+        first = self._first_fire_today(cron, now)
+        if not first:
+            return True                  # 今天本就不触发（如季频），按交易日规则补
+        return now >= datetime.fromisoformat(first)
 
     def stop(self) -> None:
         self._stop_event.set()

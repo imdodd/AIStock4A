@@ -18,8 +18,8 @@ import re
 import tracking
 
 PREFIX = "track-"
-DAY_MAP = {"MO": "0", "TU": "1", "WE": "2", "TH": "3",
-           "FR": "4", "SA": "5", "SU": "6"}
+DAY_MAP = {"MO": "1", "TU": "2", "WE": "3", "TH": "4",
+           "FR": "5", "SA": "6", "SU": "0"}
 
 RRULE_PART = re.compile(r"([A-Z]+)=([^;]+)")
 
@@ -29,10 +29,12 @@ def job_id(code: str) -> str:
 
 
 def cron_of(freq: dict | None) -> str:
-    """FREQ=WEEKLY;BYDAY=MO,TH;BYHOUR=8;BYMINUTE=20 → 20 8 * * 0,3
+    """FREQ=WEEKLY;BYDAY=MO,TH;BYHOUR=8;BYMINUTE=20 → 20 8 * * 1,4
 
-    调度器用的是 APScheduler 的星期编号（0=周一），跟 Unix crontab 的 1=周一不一样，
-    这里按工程既有约定输出数字，不能照搬 rrule 里的字母。
+    周字段一律用**标准 crontab 口径**（0/7=周日，1=周一 … 5=周五），跟
+    ``FIXED_JOBS``、``job_defs``、``EOD_CRON`` 和文档保持一致；APScheduler 后端
+    在 ``backends.crontab_to_apscheduler`` 里统一做 (n-1)%7 的映射。
+    以前这里输出 APScheduler 口径（MO→0），碰上 builtin 后端就会整天错位一天。
     """
     f = freq or {}
     raw = str(f.get("rrule") or "")
@@ -41,11 +43,11 @@ def cron_of(freq: dict | None) -> str:
     hour = parts.get("BYHOUR") or "8"
     minute = parts.get("BYMINUTE") or "20"
     days = parts.get("BYDAY") or "MO"
-    dow = ",".join(DAY_MAP.get(d.strip().upper(), "0") for d in days.split(",") if d.strip())
+    dow = ",".join(DAY_MAP.get(d.strip().upper(), "1") for d in days.split(",") if d.strip())
     if not dow:
-        dow = "0"
+        dow = "1"
     if kind == "daily":
-        return f"{minute} {hour} * * 0-4"        # 交易日，非交易日由调度器跳过
+        return f"{minute} {hour} * * 1-5"        # 交易日，非交易日由调度器跳过
     if kind == "monthly":
         day = parts.get("BYMONTHDAY") or "1"
         return f"{minute} {hour} {day} * *"

@@ -141,9 +141,15 @@ def h_eod(params: dict, ctx: dict) -> dict:
     if g:
         return g                              # dry-run 分录保持原样，验收断言不受影响
     args = list(params.get("args") or [])
-    if not args:
-        args = ["--skip-fetch"]              # 默认不重复抓行情，用已有数据重建快照
-    result = _subprocess("jobs.eod", args, ctx)
+    if params.get("skip_fetch") and "--skip-fetch" not in args:
+        # 显式要求跳过抓取时（离线重建快照）才加；默认必须是完整管道。
+        # 以前无参数时强制 --skip-fetch，导致调度器每天「准时」跑完却一条新
+        # 行情都没抓，页面永远停在昨天——这是最隐蔽的假成功。
+        args.append("--skip-fetch")
+    # 全管道（抓数 + 快照 + 成分股 + 关注池 + 研究档案）正常 8~20 分钟，
+    # 首次或成分股缓存失效时更久；沿用 900 秒会把正在干活的子进程杀掉。
+    result = _subprocess("jobs.eod", args, {**ctx, "timeout": int(
+        params.get("timeout") or ctx.get("timeout") or 2700)})
     if result.get("returncode") == 0 and _pregen_enabled(params):
         try:
             result["pregen"] = pregen_chain(params, ctx)
@@ -252,10 +258,13 @@ JOB_HANDLERS: dict[str, Callable[[dict, dict], dict]] = {
 
 # 固定 job：数量恒定，新增标的只往表里插一行，不 add_job
 FIXED_JOBS: tuple[dict, ...] = (
-    # APScheduler 的 day_of_week 是 0=Mon，且本工程 cron 校验器只接受数字：
-    # 0-4=周一到周五，1,3=周二/周四，4=周五。不能沿用 Unix crontab 的 1-5。
-    {"id": "eod_close", "job_type": "eod", "cron": "0 16 * * 0-4",
-     "params": {}, "note": "盘后 EOD 管道（交易日过滤由 core 执行）"},
+    # 周字段一律用**标准 crontab 口径**：0/7=周日、1=周一 … 5=周五。
+    # 历史上这里按 APScheduler 的 0=Mon 写成 0-4，而 builtin 后端按标准 crontab
+    # 解释，结果 builtin 下周五漏跑、周日空跑（已被交易日过滤吞掉，表现为
+    # 每周少一天数据且不报错）。现已统一：本文件/接口/文档只用标准口径，
+    # APScheduler 后端在 backends.crontab_to_apscheduler 里做一次映射。
+    {"id": "eod_close", "job_type": "eod", "cron": "30 15 * * 1-5",
+     "params": {}, "note": "盘后 EOD 管道（15:30 收盘后留 30 分钟给数据源落定；交易日过滤由 core 执行）"},
     # 消息采集不走交易日日历：周末和节假日恰恰是政策、海外市场、公司公告的
     # 高发时段，周一开盘前必须已经在库里。all_days 会绕过 core 的交易日守卫。
     {"id": "news_half_hour", "job_type": "news_round", "cron": "0,30 9-23 * * *",
@@ -264,8 +273,9 @@ FIXED_JOBS: tuple[dict, ...] = (
     # 跟踪类不再用固定分桶：每只 active 方案在 tracking_jobs.sync_all() 里
     # 按自己的 frequency.rrule 注册一条 track-<code> 任务。分桶的触发时刻和
     # 方案 label 对不上（方案写周一 08:20，桶却是周五 16:25），留着会重复出期。
-    {"id": "track_event", "job_type": "event_watch", "cron": "35 16 * * 0-4",
-     "params": {}, "note": "事件维度兜底巡检"},
+    # 15:50 在 EOD（15:30 起，约 8 分钟）之后，确保事件巡检读到当天新快照。
+    {"id": "track_event", "job_type": "event_watch", "cron": "50 15 * * 1-5",
+     "params": {}, "note": "事件维度兜底巡检（在 EOD 完成后）"},
 )
 
 __all__ = ["JOB_HANDLERS", "FIXED_JOBS", "CAD_BUCKETS", "work_items"]

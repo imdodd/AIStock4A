@@ -541,16 +541,13 @@ def tracking_detail(code: str):
         from scheduler.core import get_scheduler
         jd = get_scheduler().state.get_def(tracking_jobs.job_id(code))
         if jd:
-            # APScheduler 的 from_crontab 是 0=周一；scheduler.cron.next_fire
-            # 用的是 0=周日，两者差一天。这里按实际在跑的 APScheduler 算，
-            # 否则界面会把「每周一 08:20」显示成周日。
-            try:
-                from apscheduler.triggers.cron import CronTrigger
-                nxt = CronTrigger.from_crontab(jd["cron"]).get_next_fire_time(
-                    None, datetime.now())
-            except Exception:
-                from scheduler.cron import next_fire
-                nxt = next_fire(jd["cron"])
+            # job_defs.cron 统一存**标准 crontab 口径**（1=周一 … 5=周五），
+            # 与 builtin/APScheduler 两个后端都对齐（APScheduler 侧在
+            # backends.crontab_to_apscheduler 里映射）。所以这里直接用
+            # scheduler.cron.next_fire 算，不要再套 APScheduler 的
+            # from_crontab —— 那是 0=周一，会把「每周一 08:20」显示成周日。
+            from scheduler.cron import next_fire
+            nxt = next_fire(jd["cron"])
             job = {"id": jd["id"], "cron": jd["cron"],
                    "enabled": jd.get("enabled"),
                    "next": nxt.strftime("%Y-%m-%d %H:%M") if nxt else None}

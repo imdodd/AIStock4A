@@ -55,7 +55,7 @@ SWITCHES: dict[str, tuple[str, str]] = {
     "SCHEDULER_TRADING_DAYS_ONLY": ("1", "非交易日跳过"),
     "SCHEDULER_MISFIRE": ("7200", "触发延迟超过该秒数不补跑"),
     "PREGEN_ON_EOD": ("1", "EOD 真实执行后自动生成 digest + pregen"),
-    "EOD_CRON": ("0 16 * * 1-5", "盘后 EOD 覆盖 cron"),
+    "EOD_CRON": ("30 15 * * 1-5", "盘后 EOD 覆盖 cron（标准 crontab：1-5=周一到周五）"),
     "ASTOCK_CALENDAR": ("", "自定义节假日文件（空=用周末规则）"),
     "HOST": ("127.0.0.1", "监听地址；不要改成 0.0.0.0 暴露公网"),
     "PORT": ("8100", "监听端口"),
