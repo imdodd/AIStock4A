@@ -469,6 +469,13 @@
   .flow-map-note b{color:#ffd88a}
   .flow-map-note .mini-btn{margin-left:8px}
   .flow-map-note .close{float:right;cursor:pointer;color:var(--muted);font-size:14px;line-height:1}
+  /* 浅色主题：默认那套深蓝灰渐变+米黄字是从暗色主题带过来的，在白卡上像块黑板。
+     改成浅橙底 + 深棕字，和顶部橙色导航、其它提示条同一色系。 */
+  html[data-theme="light"] .flow-map-note{
+    background:linear-gradient(90deg,rgba(255,107,26,.10),rgba(255,107,26,.03));
+    border-color:rgba(226,86,10,.30);color:#5a4632}
+  html[data-theme="light"] .flow-map-note b{color:#c24808}
+  html[data-theme="light"] .flow-map-note .close{color:#9a8f86}
   /* 板块页右侧：资金流行业自己的成分股 / 15 日资金 */
   .sfd-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
   .sfd-head b{font-size:14px;color:var(--soft)}
