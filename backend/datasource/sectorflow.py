@@ -36,6 +36,7 @@ import re
 import subprocess
 import time
 import urllib.request
+from urllib.parse import urlparse
 
 UA = {
     "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -61,6 +62,32 @@ _BREAK: dict = {"until": 0.0, "why": "", "hits": 0}
 
 # ---------------------------------------------------------------- 基础工具
 
+# WorkBuddy / IDE 等宿主会往 shell 注入指向本机的 HTTP(S)_PROXY（127.0.0.1:<随机端口>，
+# 端口每次会话都变，不能写死）。这类代理的 TLS 层经 schannel 握手后被对端提前关闭，
+# curl 报 (56) schannel: server closed abruptly，看起来和东财限流一模一样；一旦 urllib
+# 抖动失败切到 curl，就全挂并触发 _trip 熔断，把板块资金流误降级成腾讯备源。
+# 只剥掉「指向本机」的代理：公网代理（公司/机房出网必经）必须保留，否则生产会断网。
+_PROXY_KEYS = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
+               "http_proxy", "https_proxy", "all_proxy")
+
+
+def _curl_env() -> dict:
+    """curl 子进程专用环境：剔除指向本机的代理，保留真实远程代理。"""
+    env = dict(os.environ)
+    for key in _PROXY_KEYS:
+        val = (env.get(key) or "").strip()
+        if not val:
+            continue
+        raw = val if "://" in val else "http://" + val
+        try:
+            host = (urlparse(raw).hostname or "").lower()
+        except Exception:  # noqa: BLE001
+            host = ""
+        if host in ("localhost", "127.0.0.1", "::1", "0.0.0.0") or host.startswith("127."):
+            env.pop(key, None)
+    return env
+
+
 def _get(url: str, timeout: int = 8, retry: int = 1, headers: dict | None = None) -> dict:
     hdrs = headers or UA
     last = None
@@ -82,7 +109,9 @@ def _get(url: str, timeout: int = 8, retry: int = 1, headers: dict | None = None
         for k, v in hdrs.items():
             cmd += ["-H", f"{k}: {v}"]
         cmd.append(url)
-        p = subprocess.run(cmd, capture_output=True, timeout=max(12, timeout + 4))
+        # 关键：不能让 curl 继承宿主机注入的本机代理，否则 schannel 报错被误判成限流。
+        p = subprocess.run(cmd, capture_output=True, timeout=max(12, timeout + 4),
+                           env=_curl_env())
         if p.returncode == 0 and p.stdout:
             return json.loads(p.stdout.decode("utf-8", "replace"))
         # curl 也失败：把 stderr 带出来。之前只记 urllib 的 RemoteDisconnected，
