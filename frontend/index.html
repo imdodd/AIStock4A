@@ -3564,6 +3564,7 @@
         ${L.via ? ` · ${he(L.via)}` : ''}
         ${L.coverage ? ` · 覆盖 ${Math.round(L.coverage * 100)}%（${L.hits}/${L.total}）` : ''}
         ${L.stage != null ? ` · 本地 S${L.stage} / RS60 ${fmt(L.rs60, 1)}` : ''}
+        ${d.stale ? `<br/><span style="color:#c24808">· 东财限流，成分股与资金显示 ${he(d.asof || '上次成功抓取')} 的缓存数据（非实时），上游恢复后自动重试。</span>` : ''}
         <br/><span style="color:#f5c876">板块表里没有「${he(d.name)}」这一行；这里展示的是该资金流行业自己的成分股。
         阶段 / RS60 只在本地近似行业有快照或个股命中关注池时补齐，标记「自 / 持 / 关」分别来自自选、持仓和每日关注池。</span>
         ${L.noFlow ? '<br/><span style="color:#ffb08a">当前资金流为腾讯备源：个股主力净额不可得，强弱标签显示「待确认」；阶段 / RS60 仍可用。行业历史资金为今日 / 近5日 / 近20日累计口径。</span>' : ''}

@@ -1180,8 +1180,10 @@ def market_flow_sector(bk: str):
     展示该资金流行业自己的成分股，而不是只给一个含糊的近似板块。
     """
     import time as _t
-    from datasource.sectorflow import (CLIST_URL, _get, _load_map, _num,
-                                       attach_local, history, ranking)
+    from datasource.sectorflow import (CACHE_DIR, CLIST_URL, _get, _load_map,
+                                       _num, _read_json, _write_json,
+                                       attach_local, history, ranking,
+                                       upstream_state)
     bk = str(bk or "").strip().upper()
     if not bk.startswith("BK"):
         raise HTTPException(400, f"板块代码不合法：{bk}")
@@ -1189,31 +1191,57 @@ def market_flow_sector(bk: str):
     if hit and _t.time() - hit[0] < 300:
         return {"code": 0, "data": hit[1], "meta": _meta()}
 
+    # 成分股明细以前是直连无缓存：东财一限流就 502。和 ranking()/history() 一样
+    # 落盘兜底；熔断期间直接读缓存，不再反复撞东财（越点越糟）。
+    ck_path = os.path.join(CACHE_DIR, f"sectorflow_members_{bk}.json")
     rows = attach_local(ranking()["rows"])
     row = next((r for r in rows if r.get("bk") == bk), None)
     name = (row or {}).get("name") or bk
     members, pn = [], 1
-    try:
-        while pn <= 5:
-            q = ("?pn=%d&pz=100&po=1&np=1&fltt=2&invt=2&fid=f62"
-                 "&fs=b:%s&fields=f12,f14,f2,f3,f62,f184" % (pn, bk))
-            d = (_get(CLIST_URL + q, timeout=10, retry=1).get("data") or {})
-            diff = d.get("diff") or []
-            for x in diff:
-                c = str(x.get("f12") or "").strip()
-                if not c:
-                    continue
-                pfx = "sh" if c.startswith(("6", "9")) else ("bj" if c.startswith(("4", "8")) else "sz")
-                members.append({
-                    "code": pfx + c, "name": x.get("f14"),
-                    "price": _num(x.get("f2")), "chg": _num(x.get("f3")),
-                    "main": _num(x.get("f62")), "main_pct": _num(x.get("f184")),
-                })
-            if len(diff) < 100 or len(members) >= (d.get("total") or 0):
-                break
-            pn += 1
-    except Exception as e:  # noqa: BLE001
-        raise HTTPException(502, f"{name} 成分股取数失败：{type(e).__name__}: {e}")
+    fetch_err = None
+    st = upstream_state()
+    if st.get("blocked"):
+        fetch_err = RuntimeError(f"东财限流熔断中（{st.get('why') or '上游不可用'}）")
+    else:
+        try:
+            while pn <= 5:
+                q = ("?pn=%d&pz=100&po=1&np=1&fltt=2&invt=2&fid=f62"
+                     "&fs=b:%s&fields=f12,f14,f2,f3,f62,f184" % (pn, bk))
+                d = (_get(CLIST_URL + q, timeout=10, retry=1).get("data") or {})
+                diff = d.get("diff") or []
+                for x in diff:
+                    c = str(x.get("f12") or "").strip()
+                    if not c:
+                        continue
+                    pfx = "sh" if c.startswith(("6", "9")) else ("bj" if c.startswith(("4", "8")) else "sz")
+                    members.append({
+                        "code": pfx + c, "name": x.get("f14"),
+                        "price": _num(x.get("f2")), "chg": _num(x.get("f3")),
+                        "main": _num(x.get("f62")), "main_pct": _num(x.get("f184")),
+                    })
+                if len(diff) < 100 or len(members) >= (d.get("total") or 0):
+                    break
+                pn += 1
+            if not members:
+                raise RuntimeError("东财成分股返回空")
+        except Exception as e:  # noqa: BLE001
+            fetch_err = e
+
+    if fetch_err is not None:
+        # 有缓存就降级返回（与板块列表一致：200 + stale，不让页面报错）
+        ck = _read_json(ck_path) or {}
+        cached = ck.get("data") or {}
+        if cached.get("members"):
+            out = dict(cached)
+            out.update({
+                "source": "cache", "stale": True,
+                "asof": ck.get("saved_at") or cached.get("asof"),
+                "note": (f"东财暂不可用（{str(fetch_err)[:80]}），"
+                         f"显示上次成功抓取的数据；上游恢复后自动重试"),
+            })
+            _FLOW_SECTOR[bk] = (_t.time(), out)
+            return {"code": 0, "data": out, "meta": _meta()}
+        raise HTTPException(502, f"{name} 成分股取数失败：{type(fetch_err).__name__}: {fetch_err}")
 
     try:
         days = history(bk, 15).get("days") or []
@@ -1234,6 +1262,9 @@ def market_flow_sector(bk: str):
             "stage": (row or {}).get("stage"), "rs60": (row or {}).get("rs60"),
         },
     }
+    asof = _t.strftime("%Y-%m-%d %H:%M:%S")
+    data.update({"source": "eastmoney", "stale": False, "asof": asof})
+    _write_json(ck_path, {"saved_at": asof, "data": data})
     _FLOW_SECTOR[bk] = (_t.time(), data)
     return {"code": 0, "data": data, "meta": _meta()}
 
