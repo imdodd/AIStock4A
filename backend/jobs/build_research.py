@@ -79,7 +79,11 @@ def main(argv=None) -> int:
     ap.add_argument("--top", type=int, default=20, help="关注池常驻只数")
     ap.add_argument("--force", action="store_true", help="常驻池全部强制重建")
     ap.add_argument("--full-check", action="store_true", help="对全部已有档案做完整证据检查")
-    ap.add_argument("--workers", type=int, default=4, help="模型并发数")
+    # 并发从 4 降到 2：EOD 15:30 后常驻池 + 巡检会集中打东财公告/F10 接口，
+    # 并发过高是盘后突发限流的主因之一。降并发 + 巡检间隔把尖峰摊平。
+    ap.add_argument("--workers", type=int, default=2, help="并发数（默认 2，抑制东财突发）")
+    ap.add_argument("--inspect-gap", type=float, default=0.5,
+                    help="巡检每只票之间的间隔秒数（默认 0.5，避免连续打 F10）")
     ap.add_argument("--no-inspect", action="store_true", help="跳过重大公告巡检")
     a = ap.parse_args(argv)
 
@@ -131,7 +135,9 @@ def main(argv=None) -> int:
         log(f"[研究档案] 巡检已有档案 {len(existing)} 只"
             f"（{'完整证据检查' if a.full_check or weekly else '重大公告指纹'}）")
         todo = []
-        for c in existing:
+        for i, c in enumerate(existing):
+            if i and a.inspect_gap > 0:
+                time.sleep(a.inspect_gap)   # 摊平连续 F10 请求，避免瞬间突发触发限流
             inspected += 1
             hit = research.major_changed(c)
             if not hit and (a.full_check or weekly):

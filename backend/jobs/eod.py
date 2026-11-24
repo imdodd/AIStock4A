@@ -212,20 +212,17 @@ def main(argv=None) -> int:
     else:
         log("○ 股票名称表 7 天内已更新，跳过", fh)
 
-    # ⑤ 东财资金流行业（496 个）-> 本地申万二级（124 个）成分股映射：
-    #    申万分类调整 / 新股上市后仍能正确定位，每 7 天刷新一次（约 1 分钟），
-    #    脚本内部对单个行业取数失败会跳过并继续，不会中断 EOD。
+    # ⑤ 行业口径映射表的刷新已拆成独立 job（sector_map_refresh，每周日凌晨 3 点）。
+    #    原因：它要抓 496 个东财行业的成分股，是全天最大的单次请求突发（曾达
+    #    1000+ 次 clist），和盘后 EOD 挤在同一出口 IP 会直接触发东财限流。
+    #    这里只在映射表完全缺失（首次部署 / 文件损坏）时兜底重建一次，保证 ⑥
+    #    有输入；正常情况一律跳过，由独立 job 低频错峰维护。
     map_path = os.path.join(SNAP, "flow_sector_map.json")
-    stale = True
-    if os.path.exists(map_path):
-        try:
-            stale = (datetime.now() - datetime.fromtimestamp(os.path.getmtime(map_path))).days >= 7
-        except Exception:
-            stale = True
-    if stale:
-        run([sys.executable, "-m", "tools.build_flow_sector_map"], fh, "⑤ 刷新行业口径映射表")
+    if not os.path.exists(map_path):
+        log("! 行业口径映射表缺失，EOD 兜底重建（应配置 sector_map_refresh 独立任务）", fh)
+        run([sys.executable, "-m", "tools.build_flow_sector_map"], fh, "⑤ 兜底重建行业口径映射表")
     else:
-        log("○ 行业口径映射表 7 天内已更新，跳过", fh)
+        log("○ 行业口径映射表由独立任务 sector_map_refresh 维护，EOD 跳过", fh)
 
     # ⑥ 行业成分股阶段快照：成员源已切到东财申万 496 个 BK 的全量成分股
     #    （exact + 三级 parent 反查汇总到 124 个 pt，含科创板/北交所/次新股）。

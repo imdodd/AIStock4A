@@ -55,9 +55,16 @@ RANK_CACHE = os.path.join(CACHE_DIR, "sectorflow_rank.json")
 HIST_CACHE_DIR = os.path.join(CACHE_DIR, "sectorflow_hist")
 
 BREAK_SECONDS = 600          # 上游失败后静默 10 分钟，期间只读缓存
+# 熔断状态落盘共享：EOD / 资讯 / 前端是各自独立的 Python 进程，进程内内存熔断
+# 互不感知——A 进程撞限流进了熔断，B 进程照样继续打，把整个出口 IP 越撞越死。
+# 这里把熔断写到一个共享文件，任何进程 trip 后所有进程都能看到，实现「一处
+# 被限、全链路静默」。文件在 cache 目录，随数据目录走；读侧按 mtime 缓存，
+# 几乎无额外 IO 开销。
+BREAK_FILE = os.path.join(CACHE_DIR, "sectorflow_break.json")
 _MEM: dict = {"rank": (0.0, None), "hist": {}, "tx": (0.0, None),
               "prefer_curl": False, "last_kline_error": ""}
 _BREAK: dict = {"until": 0.0, "why": "", "hits": 0}
+_BREAK_CACHE: dict = {"mtime": -1.0, "data": None}
 
 
 # ---------------------------------------------------------------- 基础工具
@@ -146,17 +153,58 @@ def _now() -> str:
     return time.strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _sync_break_from_disk() -> None:
+    """读共享熔断文件；发现别的进程的熔断就合并进本进程（取最晚的 until）。"""
+    try:
+        mt = os.path.getmtime(BREAK_FILE)
+    except OSError:
+        return
+    if mt == _BREAK_CACHE["mtime"]:
+        return
+    _BREAK_CACHE["mtime"] = mt
+    try:
+        with open(BREAK_FILE, encoding="utf-8") as f:
+            d = json.load(f) or {}
+    except Exception:  # noqa: BLE001
+        return
+    _BREAK_CACHE["data"] = d
+    disk_until = float(d.get("until") or 0)
+    if disk_until > _BREAK["until"]:
+        _BREAK["until"] = disk_until
+        _BREAK["why"] = str(d.get("why") or "")[:120]
+        _BREAK["hits"] = max(int(_BREAK.get("hits") or 0), int(d.get("hits") or 0))
+
+
+def _write_break() -> None:
+    """把本进程熔断原子写入共享文件，供其它进程读取。"""
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        tmp = BREAK_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump({"until": _BREAK["until"], "why": _BREAK["why"],
+                       "hits": int(_BREAK.get("hits") or 0),
+                       "written_at": _now()}, f, ensure_ascii=False)
+        os.replace(tmp, BREAK_FILE)
+        _BREAK_CACHE["mtime"] = os.path.getmtime(BREAK_FILE)
+    except Exception:  # noqa: BLE001  熔断写失败不能反过来打断取数
+        pass
+
+
 def _trip(why: str) -> None:
-    """上游不可用，进熔断。"""
+    """上游不可用，进熔断（本进程 + 共享文件）。"""
+    _sync_break_from_disk()
     _BREAK["until"] = time.time() + BREAK_SECONDS
     _BREAK["why"] = str(why)[:120]
     _BREAK["hits"] = int(_BREAK.get("hits") or 0) + 1
+    _write_break()
 
 
 def upstream_state() -> dict:
-    """给接口层/前端看的熔断状态。"""
+    """给接口层/前端看的熔断状态（合并共享文件的跨进程状态）。"""
+    _sync_break_from_disk()
     left = max(0, int(_BREAK["until"] - time.time()))
-    return {"blocked": left > 0, "retry_in": left, "why": _BREAK["why"], "hits": _BREAK["hits"]}
+    return {"blocked": left > 0, "retry_in": left, "why": _BREAK["why"],
+            "hits": _BREAK["hits"], "shared": True}
 
 
 def _read_json(path: str):

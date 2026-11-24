@@ -158,6 +158,21 @@ def h_eod(params: dict, ctx: dict) -> dict:
     return result
 
 
+def h_sector_map(params: dict, ctx: dict) -> dict:
+    """行业口径映射表刷新：从 EOD 拆出的独立低频任务。
+
+    原在 EOD ⑤ 每周触发，一次抓 496 个东财行业成分股（1000+ 次 clist 请求），
+    和盘后抓数挤在同一出口 IP 必撞限流。改到周日凌晨单独跑，脚本内部带成员
+    快照增量复用（TTL 内不重抓），实际请求降到几十次。
+    """
+    g = _guard(ctx, "tools.build_flow_sector_map")
+    if g:
+        return g
+    args = ["--force"] if params.get("force") else []
+    return _subprocess("tools.build_flow_sector_map", args,
+                       {**ctx, "timeout": int(params.get("timeout") or 1800)})
+
+
 def h_pregen(params: dict, ctx: dict) -> dict:
     """独立产出任务：供自定义 job_defs 用（不占 7 个固定 job）。"""
     g = _guard(ctx, "pregen_chain", {"date": str(ctx.get("trade_date") or "")[:10]})
@@ -248,6 +263,7 @@ def h_event_watch(params: dict, ctx: dict) -> dict:
 JOB_HANDLERS: dict[str, Callable[[dict, dict], dict]] = {
     "noop": h_noop,
     "eod": h_eod,
+    "sector_map": h_sector_map,
     "pregen": h_pregen,
     "news_round": h_news_round,
     "tracking_review": h_tracking_review,
@@ -265,6 +281,12 @@ FIXED_JOBS: tuple[dict, ...] = (
     # APScheduler 后端在 backends.crontab_to_apscheduler 里做一次映射。
     {"id": "eod_close", "job_type": "eod", "cron": "30 15 * * 1-5",
      "params": {}, "note": "盘后 EOD 管道（15:30 收盘后留 30 分钟给数据源落定；交易日过滤由 core 执行）"},
+    # 行业口径映射表：从 EOD 拆出，周日凌晨 3 点单独跑。原在盘后和抓数一起跑，
+    # 496 个行业的成分股翻页是全天最大突发（1000+ 次 clist），是东财限流主因之一。
+    # all_days=True 绕开交易日过滤——周日本就不是交易日。
+    {"id": "sector_map_refresh", "job_type": "sector_map", "cron": "0 3 * * 0",
+     "params": {}, "all_days": True,
+     "note": "行业口径映射表（东财BK→本地pt），周日凌晨错峰刷新，增量复用成员快照"},
     # 消息采集不走交易日日历：周末和节假日恰恰是政策、海外市场、公司公告的
     # 高发时段，周一开盘前必须已经在库里。all_days 会绕过 core 的交易日守卫。
     {"id": "news_half_hour", "job_type": "news_round", "cron": "0,30 9-23 * * *",

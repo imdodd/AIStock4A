@@ -108,21 +108,74 @@ def load_local() -> tuple[dict, dict]:
     return by_name, rev
 
 
-def main() -> int:
+# 增量刷新：成分股关系变动很慢（申万分类一年调整几次、新股上市个别行业才增），
+# 没必要每 7 天把 496 个 BK 全抓一遍——那是 1000+ 次 clist 请求，刷新日必撞东财
+# 限流。已成功抓过且成员数合理的 BK 在 TTL 内直接复用快照；只抓「新增/失败/过期」
+# 的 BK，请求量从 1000+ 降到几十次。--force 可强制全量重抓。
+MEMBER_TTL_DAYS = 14           # 成员快照复用期（比映射表 7 天 TTL 略长，安全）
+MAX_WORKERS = 3                # 并发从 10 降到 3，避免瞬时突发
+REQUEST_GAP = 0.3              # 每个请求后强制间隔，配合 sectorflow 的限流策略
+
+
+def _load_prev_members() -> tuple[dict, dict]:
+    """读上次成员快照及其时间戳，作为增量复用的基础。"""
+    prev, stamps = {}, {}
+    if os.path.exists(MEM_FILE):
+        try:
+            d = json.load(open(MEM_FILE, encoding="utf-8"))
+            prev = d.get("members") or {}
+            stamps = d.get("bk_fetched_at") or {}
+        except Exception:
+            pass
+    return prev, stamps
+
+
+def main(argv=None) -> int:
+    import argparse
+    ap = argparse.ArgumentParser(description="东财行业→本地板块映射表")
+    ap.add_argument("--force", action="store_true", help="强制全量重抓成分股（忽略增量缓存）")
+    a = ap.parse_args(argv or [])
+
     rows = ranking()["rows"]
-    print(f"[1/3] 东财申万行业 {len(rows)} 个，开始并发抓成分股…", flush=True)
-    members: dict[str, dict] = {}
+    prev, stamps = ({}, {} if a.force else _load_prev_members())
+    now = time.time()
+
+    # 决定哪些 BK 需要真抓：无快照 / 快照过期 / 上次为空 / 本次不在快照里
+    todo, members, reused = [], dict(prev), 0
+    for r in rows:
+        bk = r["bk"]
+        old = prev.get(bk)
+        ts = stamps.get(bk, 0)
+        age_days = (now - ts) / 86400 if ts else 999
+        if old and (old.get("codes") or []) and age_days <= MEMBER_TTL_DAYS:
+            reused += 1
+            continue
+        todo.append(r)
+        members.pop(bk, None)          # 过期/失败的旧数据不再复用
+
+    print(f"[1/3] 东财申万行业 {len(rows)} 个 · 复用快照 {reused} 个 · "
+          f"需抓取 {len(todo)} 个（并发 {MAX_WORKERS}，间隔 {REQUEST_GAP}s）", flush=True)
+
     failed = []
-    with ThreadPoolExecutor(max_workers=10) as pool:
-        fut = {pool.submit(fetch_members, r["bk"]): r for r in rows}
+
+    def fetch_one(r):
+        time.sleep(REQUEST_GAP)        # 每个请求前间隔，抑制突发
+        return r, fetch_members(r["bk"])
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        fut = [pool.submit(fetch_one, r) for r in todo]
         for i, f in enumerate(as_completed(fut), 1):
-            r = fut[f]
+            r = None
             try:
-                members[r["bk"]] = f.result()
+                r, mm = f.result()
+                members[r["bk"]] = mm
+                stamps[r["bk"]] = now    # 记录本次抓取时间，供下轮增量判断
             except Exception as e:  # noqa: BLE001
-                failed.append({"bk": r["bk"], "name": r["name"], "error": str(e)})
-            if i % 100 == 0:
-                print(f"      {i}/{len(rows)}", flush=True)
+                if r is None:
+                    r = todo[i - 1] if i - 1 < len(todo) else {}
+                failed.append({"bk": r.get("bk"), "name": r.get("name"), "error": str(e)})
+            if i % 50 == 0:
+                print(f"      {i}/{len(todo)}", flush=True)
 
     by_name, rev = load_local()
     local_name = {s["code"]: s["name"] for s in by_name.values()}
@@ -190,11 +243,12 @@ def main() -> int:
     with open(MAP_FILE, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=1)
     with open(MEM_FILE, "w", encoding="utf-8") as f:
-        json.dump({"generated_at": payload["generated_at"], "members": members},
-                  f, ensure_ascii=False)
+        json.dump({"generated_at": payload["generated_at"], "members": members,
+                   "bk_fetched_at": stamps}, f, ensure_ascii=False)
 
     print(f"[3/3] 写入 {MAP_FILE}", flush=True)
-    print("      匹配统计:", dict(stat), " 抓取失败:", len(failed), flush=True)
+    print("      匹配统计:", dict(stat), " 抓取失败:", len(failed),
+          f" 本轮实抓 {len(todo)} 个 / 复用 {reused} 个", flush=True)
     for key in ("集成电路制造", "半导体设备", "国有大型银行Ⅲ", "银行", "水力发电", "电信运营商"):
         for bk, x in out.items():
             if x["name"] == key:
