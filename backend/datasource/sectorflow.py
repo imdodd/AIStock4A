@@ -105,7 +105,10 @@ def _get(url: str, timeout: int = 8, retry: int = 1, headers: dict | None = None
                 time.sleep(0.4 * (i + 1))
         _MEM["prefer_curl"] = True
     try:
-        cmd = ["curl", "-sS", "--max-time", str(max(5, timeout))]
+        # Windows schannel + 东财 TLS1.3 会报 (56) server closed abruptly (missing
+        # close_notify)，而显式指定 TLS1.2 立刻恢复正常（实测 2026-11-24）。
+        # Linux/OpenSSL 上该参数同样兼容，故统一加上，避免平台分支。
+        cmd = ["curl", "-sS", "--tlsv1.2", "--max-time", str(max(5, timeout))]
         for k, v in hdrs.items():
             cmd += ["-H", f"{k}: {v}"]
         cmd.append(url)

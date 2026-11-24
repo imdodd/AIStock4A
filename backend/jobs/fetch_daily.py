@@ -117,6 +117,12 @@ def main(argv=None) -> int:
 
     codes = [c.strip() for c in args.only.split(",") if c.strip()] if args.only \
         else universe.all_codes(include_pool=not args.no_pool)
+    # 双保险：即便调用方显式 --only 传了 pt 板块，也不许走腾讯源写进 klines.json。
+    # 板块 K 线只由 fetch_sector_klines 从东财 BK 源更新，避免量纲断层复发。
+    pt_codes = [c for c in codes if str(c).lower().startswith("pt")]
+    if pt_codes:
+        log(f"  跳过 {len(pt_codes)} 个 pt 板块（仅允许东财 BK 源更新）", fh)
+        codes = [c for c in codes if c not in pt_codes]
     log(f"本次待更新标的 {len(codes)} 个", fh)
 
     src = get_source()

@@ -90,9 +90,15 @@ def hold_codes() -> list[str]:
 
 
 def all_codes(include_pool: bool = True) -> list[str]:
-    """全部需要每日更新的标的（去重、保持稳定顺序）"""
+    """全部需要每日更新的标的（去重、保持稳定顺序）。
+
+    注意：pt 板块不能进这个池子。板块日K由 fetch_sector_klines 走东财 BK 源
+    独家补齐；腾讯 pt 源的指数数值是东财的约 10 倍（如白酒 39000 vs 4100），
+    一旦被 fetch_daily 用腾讯源抓到并 merge 进 klines.json，就会把东财的历史
+    末根覆盖成高量纲值，K线图 Y 轴被撑爆、历史被压成平线（2026-11-24 事故）。
+    """
     seen, out = set(), []
-    groups = [list(INDEX_META), [c for c, _ in watch_items()], hold_codes(), sector_codes()]
+    groups = [list(INDEX_META), [c for c, _ in watch_items()], hold_codes()]
     if include_pool:
         groups.append(signal_pool())
     for g in groups:

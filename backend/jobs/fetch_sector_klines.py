@@ -238,7 +238,25 @@ def main(argv=None) -> int:
         log(f"   [{i}/{len(todo)}] {pt}←{bk} [{src}] {len(fresh)} 根 → 合并后 {len(store[pt])} 根"
             f" (末 {store[pt][-1]['date']})", fh)
 
-    if got:
+    # 防复发校验：腾讯 pt 快照一旦混进东财 BK 序列，会出现 3 倍以上的量纲
+    # 断层（2026-11-24 事故）。写盘前统一剔除少数派段，宁可少几根也不留断层。
+    from jobs.repair_sector_kline_scale import outlier_indexes
+    fixed_jumps = 0
+    for pt in [c for c in store if str(c).lower().startswith("pt")]:
+        nodes = store[pt]
+        bad = outlier_indexes(nodes)
+        if not bad:
+            continue
+        bad_dates = {nodes[j]["date"] for j in bad}
+        cleaned = [b for b in nodes if b["date"] not in bad_dates]
+        if not cleaned:
+            log(f"   [量纲校验] {pt} 剔除后将为空，保留原样并告警", fh)
+            continue
+        store[pt] = cleaned
+        fixed_jumps += 1
+        log(f"   [量纲校验] {pt} 剔除断层 {len(nodes)} → {len(cleaned)} 根", fh)
+
+    if got or fixed_jumps:
         save_store(store)
         log(f"③ 写入 {KLINE_FILE}：本次补齐 {got} 个板块（种子 {from_seed} · 东财 {got-from_seed}）· "
             f"历史不足保留 {short} · 失败/熔断 {failed}", fh)
