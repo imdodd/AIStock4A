@@ -94,6 +94,13 @@ SEARCH_RECIPE = (
     "交易日：先搜「A股 {day_cn} 板块 异动 原因」，再搜「世界经济 美联储 货币政策 {day_cn}」"
     "这类宏观主题；再对查询范围里每只个股搜「<个股名> {day_cn} 公告」；"
     "再对 Stage1/Stage2 重点行业搜「<行业名> {day_cn} 最新消息」。"
+    "大宗商品供应端必须单独搜（收的是影响全球期货供应的事件，不是价格涨跌解读）："
+    "中文搜「原油 OPEC 减产 供应 {day_cn}」「小金属 镍 锂 稀土 出口管制 停产 {day_cn}」"
+    "「化工 装置 停产 检修 涨价 {day_cn}」；英文搜「OPEC production cut oil supply {day_en} Reuters」、"
+    "「nickel lithium rare earth export ban supply {day_en} Bloomberg Reuters」、"
+    "「chemical plant shutdown force majeure {day_en}」。"
+    "重点收 OPEC+ 产量决议、EIA/IEA 库存与月报、地缘冲突断供、矿端罢工/出口禁令、"
+    "海外化工装置停产或不可抗力——这类供应端扰动会传导到国内板块；纯涨跌解读不算增量。"
     "美国权威财经源必须单独搜：用英文搜「US stocks Fed inflation {day_en} Reuters AP CNBC」、"
     "「Wall Street {day_en} Bloomberg WSJ MarketWatch」这类词，覆盖美股大盘、美联储、"
     "通胀就业、美元美债、中美贸易与半导体出口管制等主题。"
@@ -104,6 +111,10 @@ WEEKEND_RECIPE = (
     "「{day_cn} 海外市场 美股 美联储 最新」；再搜「<个股名> {day_cn} 公告」与"
     "「下周 A股 展望 {day_cn}」；对重点行业搜「<行业名> {day_cn} 消息」。"
     "不要搜「板块异动原因」这类交易日模板——周末没有盘中异动。"
+    "大宗商品供应端照常搜（OPEC+ 会议、地缘断供、矿端罢工常在周末发生）："
+    "中文搜「原油 OPEC 供应 {day_cn}」「小金属 稀土 出口管制 停产 {day_cn}」；"
+    "英文搜「OPEC supply decision {day_en} Reuters」「metal export ban mine strike {day_en} Bloomberg」。"
+    "收供应端事件，不收价格涨跌解读。"
     "美国权威财经源必须单独搜：用英文搜「Fed inflation US stocks {day_en} Reuters AP」、"
     "「Wall Street week ahead {day_en} Bloomberg CNBC WSJ」这类词，周末海外政策、"
     "经济数据与下周展望照常收录。"
@@ -116,6 +127,16 @@ US_SOURCES_HINT = (
     "BLS 美国劳工统计局、BEA 美国经济分析局、白宫 / 美国财政部 / USTR 官方发布。"
     "这些源的报道即使不点名 A 股也要收——美联储利率、美国通胀就业、美元指数、"
     "美债收益率、美股科技巨头、中美贸易与出口管制，都是本系统判断大盘与板块的关键输入。"
+)
+# 全球期货/大宗商品供应端权威源白名单：这类消息多由海外通讯社与官方机构首发，
+# 给模型明确媒体清单，避免搜到行情解读号 / 纯价格播报 / 搬运营销号。
+COMMODITY_SOURCES_HINT = (
+    "大宗商品供应端权威源优先：Reuters 路透、Bloomberg 彭博、AP 美联社（能源与金属线）、"
+    "OPEC 官网与月报、EIA 美国能源信息署、IEA 国际能源署、USGS 美国地质调查局、"
+    "各国矿业/能源主管部门公告、LME 伦敦金属交易所公告、上海有色网 SMM。"
+    "这些源的供应端报道即使不点名 A 股也要收——OPEC+ 产量决议、中东地缘断供、"
+    "智利/印尼/刚果矿端扰动、稀土出口管制、海外化工装置停产，"
+    "都会通过成本与供需传导到国内油气、化工、小金属、能源金属板块。"
 )
 
 
@@ -147,16 +168,23 @@ def _build_prompt(day: str, sectors: list[dict], stocks: list[dict],
 查询范围：个股（{stock_hint}）；行业（{query_names} 等 Stage1/Stage2 行业）；
 大局（国内外宏观经济、世界经济、货币政策、海外市场——官方媒体这类报道即使不点名 A 股
 也对本系统判断大盘有价值，必须保留，不许当「与 A 股无关」剔除）。
+全球期货供应端（原油、天然气、化工原料、小金属/稀土/能源金属、煤炭等影响全球供给的事件，
+如 OPEC+ 产量决议、地缘断供、矿端罢工或出口管制、海外装置停产——这类必须收）。
 {US_SOURCES_HINT}
+{COMMODITY_SOURCES_HINT}
 搜索方式：{recipe}
 {us_rss_block}
-只保留对大局 / 板块 / 个股确有增量的新闻，最多 6 条；其中美国权威源至少 2 条（有真增量时）。
+只保留对大局 / 板块 / 个股确有增量的新闻，最多 7 条；其中美国权威源至少 2 条、
+全球期货供应端至少 1 条（均为有真增量时）。供应端新闻的 category 一律写 commodity，
+并在 sectors 里标到对应的国内板块（油服工程 / 炼化及贸易 / 化学原料 / 小金属 / 能源金属 /
+贵金属 / 煤炭开采等，code 必须从下方清单原样复制）。逻辑里要写清「海外供应事件 →
+国内哪个板块的成本或供需受什么影响」，不要只复述海外行情。
 只输出一个 JSON 对象，不要解释文字。
 
 输出格式：
 {{"date":"{day}","summary":"本轮大局一句话","window":"检索时间窗","source_of_truth":"事实摘自所列公开报道；板块/个股影响为模型推断，不构成买卖建议。","items":[
 {{"title":"客观标题","url":"原文链接","source":"媒体名","time":"YYYY-MM-DD HH:MM",
-"summary":"事实摘要","category":"other","impact":"利多|利空|中性|分化",
+"summary":"事实摘要","category":"other|cn_policy|commodity|us_stock","impact":"利多|利空|中性|分化",
 "impact_note":"影响说明","horizon":"短期|中期","confidence":"高|中|低","logic":"传导路径",
 "keywords":["关键词"],
 "sectors":[{{"code":"pt...","name":"板块名","dir":"利多|利空|中性|分化","note":"影响说明"}}],
