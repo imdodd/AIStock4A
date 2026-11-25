@@ -9,21 +9,24 @@
     2) 东财 push2his secid=90.BKxxxx —— 种子缺某板块或想刷新到更新日期时才抓。
   默认种子优先：种子命中即合并，绝不联网；只有种子缺失/覆盖不足的板块才走东财。
 
-设计（本地纯增量、不碰现有数据）：
-  · 本地已有且末日期 >= 市场最新交易日的板块 → 直接跳过，一根不动。
-    因此本机/已在跑的实例执行本脚本几乎全部跳过，零副作用。
-  · 待补板块先查静态种子，命中且根数足够 → 按日期并集合并（零网络）。
-  · 种子未覆盖的板块才抓东财 BK 日 K；单板块有效根数 < MIN_BARS 不覆盖。
+设计（每日严格增量，2026-11-25 修正停更缺陷）：
+  · 新鲜度基准 = 非 pt 标的（指数/个股）的末日期；pt 末日期 >= 基准 → 跳过。
+  · 落后 1~STALE_DAYS 天 → 轻量增量：只抓东财最近 LIGHT_LIMIT 根按日期并集合并，
+    不查种子（种子末日期更旧，无意义），串行间隔 REQ_SLEEP 秒，避免盘后突发。
+  · 落后 > STALE_DAYS 天或历史不足 MIN_BARS → 全量补齐：种子优先（零网络），
+    种子未覆盖才抓东财 500 根。单板块有效根数 < MIN_BARS 不覆盖。
+  · 落后 > ALERT_LAG_DAYS 天时打印 [WARN]，防止再次「悄悄停更」（11-25 事故）。
   · 连续失败 STREAK_LIMIT 次才暂停，成功即清零，支持断点续跑。
   · 全程原子写 klines.json；任一步异常都不会损坏现有文件。
 
 用法（在 backend/ 目录）：
-  python -m jobs.fetch_sector_klines                 # 增量补齐（种子优先，只补缺/旧/不足）
-  python -m jobs.fetch_sector_klines --no-seed       # 跳过种子，强制走东财
+  python -m jobs.fetch_sector_klines                 # 每日增量（落后1~7天轻量抓12根，落后更多全量）
+  python -m jobs.fetch_sector_klines --no-seed       # 全量补齐时跳过种子，强制走东财
   python -m jobs.fetch_sector_klines --dry-run       # 只报告待补清单，不抓不写
-  python -m jobs.fetch_sector_klines --force         # 忽略新鲜度，重抓全部板块
+  python -m jobs.fetch_sector_klines --force         # 忽略新鲜度，全量重抓全部板块
   python -m jobs.fetch_sector_klines --min 60        # 自定义历史充足阈值
-  python -m jobs.fetch_sector_klines --only pt01801081,...
+  python -m jobs.fetch_sector_klines --only pt01801039   # 单板块（如重抓非金属材料Ⅱ）
+  python -m jobs.fetch_sector_klines --only pt01801039 --force --no-seed
 """
 from __future__ import annotations
 
@@ -51,8 +54,11 @@ SEED_FILE_FALLBACK = os.path.join(DEFAULT_DATA_DIR, "raw", "sector_klines_seed.j
 LOG_DIR = os.path.join(DATA_DIR, "logs")
 
 MIN_BARS = 60           # 少于此根数视为历史不足，需要补齐
-FULL_LIMIT = 500        # 单次抓取根数（覆盖 276 根计算窗口）
-STALE_DAYS = 7          # 末日期落后市场最新交易日超过此天数才判为旧（同周内不折腾）
+FULL_LIMIT = 500        # 全量抓取根数（覆盖 276 根计算窗口）
+LIGHT_LIMIT = 12        # 落后几天的轻量增量：只抓最近 12 根合并
+STALE_DAYS = 7          # 落后超过 7 天转全量补齐（历史可能大段缺失）
+ALERT_LAG_DAYS = 1      # 板块末日期落后市场超过 1 天即告警，防悄悄停更
+REQ_SLEEP = 0.3         # 东财串行请求间隔（限流优化：不再并发猛打）
 
 
 def log(msg, fh=None):
@@ -164,8 +170,10 @@ def main(argv=None) -> int:
     log(f"本地标的 {len(store)} · 市场最新交易日 {mdate} · 映射种子 {len(bk_map)} 条 · "
         f"静态种子 {len(seed)} 板块(末{seed_asof or '无'}){' [已禁用]' if args.no_seed else ''}", fh)
 
-    # 划分待办：已有且新鲜且历史足 → 跳过；其余 → 待补
-    todo, skip = [], []
+    # 划分待办：新鲜 → 跳过；落后 1~STALE_DAYS 天 → 轻量增量（抓最近 LIGHT_LIMIT 根）；
+    # 落后 > STALE_DAYS 天或历史不足 → 全量补齐（种子优先）。
+    # 关键：不能再把「落后 1 天」当「已最新」跳过——11-25 板块停更事故的根因。
+    todo, skip, stale_alert = [], [], []
     for pt in meta:
         if only and pt not in only:
             continue
@@ -174,20 +182,32 @@ def main(argv=None) -> int:
             skip.append((pt, "无BK映射"))
             continue
         bars = store.get(pt) or []
-        if not args.force and bars and len(bars) >= args.min and \
-                (not mdate or bars[-1]["date"] >= mdate or
-                 _days_between(bars[-1]["date"], mdate) <= STALE_DAYS):
+        lag = _days_between(bars[-1]["date"], mdate) if (mdate and bars) else 0
+        if not args.force and bars and len(bars) >= args.min and lag <= 0:
             skip.append((pt, f"已最新({len(bars)}根,{bars[-1]['date']})"))
             continue
-        todo.append((pt, bk, len(bars)))
+        if lag > ALERT_LAG_DAYS:
+            stale_alert.append((pt, lag, bars[-1]["date"] if bars else "无"))
+        if args.force or not bars or len(bars) < args.min or lag > STALE_DAYS:
+            mode = "全量"
+        else:
+            mode = "轻量"
+        todo.append((pt, bk, len(bars), mode, lag))
 
-    log(f"② 待补 {len(todo)} · 跳过 {len(skip)}", fh)
+    if stale_alert:
+        log(f"[WARN] {len(stale_alert)} 个板块末日期落后市场超过 {ALERT_LAG_DAYS} 天：", fh)
+        for pt, lag, last in stale_alert[:10]:
+            log(f"   {pt} 末 {last} 落后 {lag} 天", fh)
+        if len(stale_alert) > 10:
+            log(f"   ... 其余 {len(stale_alert)-10} 个略", fh)
+    n_light = sum(1 for x in todo if x[3] == "轻量")
+    log(f"② 待补 {len(todo)}（轻量 {n_light} · 全量 {len(todo)-n_light}）· 跳过 {len(skip)}", fh)
     for pt, why in skip[:6]:
         log(f"   skip {pt}: {why}", fh)
 
     if args.dry_run:
-        for pt, bk, n in todo[:20]:
-            log(f"   todo {pt} → {bk} (本地{n}根)", fh)
+        for pt, bk, n, mode, lag in todo[:20]:
+            log(f"   todo {pt} → {bk} [{mode}] 落后{lag}天 (本地{n}根)", fh)
         log(f"[DRY-RUN] 未抓数、未写盘", fh)
         fh.close()
         return 0
@@ -200,16 +220,21 @@ def main(argv=None) -> int:
     from datasource import sectorflow
 
     got, failed, short = 0, 0, 0
+    got_light, got_full = 0, 0
     from_seed = 0                   # 本次由静态种子补齐的板块数（零网络）
     streak = 0                      # 连续失败计数（仅东财抓取路径）：单个板块偶发失败跳过即可
     STREAK_LIMIT = 5
-    for i, (pt, bk, n) in enumerate(todo, 1):
+    for i, (pt, bk, n, mode, lag) in enumerate(todo, 1):
         src = "种子"
-        fresh = seed.get(pt) or []
+        # 轻量增量只抓东财最近 LIGHT_LIMIT 根；不查种子（种子末日期更旧，无意义）。
+        fresh = (seed.get(pt) or []) if mode == "全量" else []
         if not fresh:
             src = "东财"
-            fresh = sectorflow.fetch_bk_kline(bk, limit=args.limit)
-        if len(fresh) < args.min:
+            limit = min(args.limit, LIGHT_LIMIT) if mode == "轻量" else args.limit
+            fresh = sectorflow.fetch_bk_kline(bk, limit=limit)
+        # 轻量模式只抓 12 根，不适用 MIN_BARS 门槛；只要抓到有效根就合并。
+        min_ok = 1 if mode == "轻量" else args.min
+        if len(fresh) < min_ok:
             short += 1
             if src == "东财":
                 streak += 1
@@ -218,7 +243,7 @@ def main(argv=None) -> int:
             else:
                 streak = 0          # 种子路径不消耗上游配额
                 extra = ""
-            log(f"   [{i}/{len(todo)}] {pt}←{bk} [{src}] 仅 {len(fresh)} 根(<{args.min})，"
+            log(f"   [{i}/{len(todo)}] {pt}←{bk} [{mode}/{src}] 仅 {len(fresh)} 根(<{min_ok})，"
                 f"保留本地 {n} 根（连续失败 {streak}）{extra}", fh)
             if src == "东财" and streak >= STREAK_LIMIT:
                 log(f"   [{i}/{len(todo)}] 连续 {streak} 个失败，判定上游不可用，"
@@ -226,16 +251,20 @@ def main(argv=None) -> int:
                 failed += len(todo) - i
                 break
             if src == "东财":
-                time.sleep(min(0.5 * (2 ** (streak - 1)), 8))
+                time.sleep(min(0.5 * (2 ** (streak - 1)), REQ_SLEEP))
             continue
         streak = 0                  # 成功即清零
         store[pt] = merge_bars(store.get(pt), fresh)
         got += 1
+        if mode == "轻量":
+            got_light += 1
+        else:
+            got_full += 1
         if src == "种子":
             from_seed += 1
         else:
-            time.sleep(0.15)
-        log(f"   [{i}/{len(todo)}] {pt}←{bk} [{src}] {len(fresh)} 根 → 合并后 {len(store[pt])} 根"
+            time.sleep(REQ_SLEEP)
+        log(f"   [{i}/{len(todo)}] {pt}←{bk} [{mode}/{src}] {len(fresh)} 根 → 合并后 {len(store[pt])} 根"
             f" (末 {store[pt][-1]['date']})", fh)
 
     # 防复发校验：腾讯 pt 快照一旦混进东财 BK 序列，会出现 3 倍以上的量纲
@@ -258,8 +287,8 @@ def main(argv=None) -> int:
 
     if got or fixed_jumps:
         save_store(store)
-        log(f"③ 写入 {KLINE_FILE}：本次补齐 {got} 个板块（种子 {from_seed} · 东财 {got-from_seed}）· "
-            f"历史不足保留 {short} · 失败/熔断 {failed}", fh)
+        log(f"③ 写入 {KLINE_FILE}：本次补齐 {got} 个板块（轻量 {got_light} · 全量 {got_full}，"
+            f"其中种子 {from_seed} · 东财 {got-from_seed}）· 历史不足保留 {short} · 失败/熔断 {failed}", fh)
     else:
         log(f"③ 无板块补齐成功（不足 {short} · 失败 {failed}），klines.json 未改动", fh)
 
