@@ -1335,6 +1335,34 @@ def screener_scan():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/dragon")
+def dragon(date: str | None = None, refresh: int = 0):
+    """擒龙三档视图：确认龙 / 退位龙 / 只观察 + 盘中晋级轨迹。
+
+    只读 data/dragon/ 的落盘结果（由 dragon_daily / dragon_intraday 产出）。
+    refresh=1 时触发一次盘中腾讯快照验证（零东财请求），便于手动刷新。
+    date 不传取最近一期潜龙池。
+    """
+    from engines import dragon as dg
+    if date:
+        safe_slug(date, "日期")
+    if refresh:
+        try:
+            dg.intraday_check("close", date or datetime.now().strftime("%Y-%m-%d"))
+        except Exception:
+            pass  # 手动刷新失败不影响读已有结果
+    return {"code": 0, "data": dg.current(date), "meta": _meta()}
+
+
+@app.post("/api/dragon/run")
+def dragon_run(mode: str = "daily", date: str | None = None, slot: str = "close"):
+    """手动触发擒龙任务（盘后建池 / 盘中验证），返回子进程日志。"""
+    from scheduler import handlers
+    ctx = {"dry_run": False, "trade_date": date}
+    params = {"mode": mode, "slot": slot}
+    return {"code": 0, "data": handlers.h_dragon(params, ctx), "meta": _meta()}
+
+
 @app.get("/api/ai/case/{code}")
 def ai_case(code: str, date: str | None = None, refresh: int = 0):
     """异动证据包（公告/龙虎榜/资金流/分时/涨停池 + 本地盘口板块），当日缓存"""

@@ -644,6 +644,80 @@
   .indov .iname{font-weight:600;color:var(--soft);font-size:13px;min-width:72px;flex:none}
   .indov .imeta{font-size:11px;color:var(--muted);margin-left:auto;white-space:nowrap}
   #mvDrillBar:empty{display:none}
+  /* 擒龙 · 双闸门 —— 过滤项：选中实底白字，未选中按档位上色，深浅主题都清晰 */
+  #dgLanes{gap:7px}
+  #dgLanes button{border-radius:8px;padding:5px 13px;font-size:12px;font-weight:700;
+    border:1px solid var(--line);background:var(--panel2);color:var(--muted);transition:all .15s;position:relative}
+  #dgLanes button:hover{filter:brightness(1.08)}
+  #dgLanes button[data-tip]{cursor:help}
+  #dgLanes button[data-tip]:hover::after{content:attr(data-tip);position:absolute;left:50%;bottom:calc(100% + 8px);
+    transform:translateX(-50%);z-index:99;min-width:230px;max-width:300px;white-space:normal;padding:8px 11px;
+    border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--soft);
+    font-size:11px;font-weight:400;line-height:1.65;text-align:left;letter-spacing:0;
+    box-shadow:0 6px 20px rgba(0,0,0,.28);pointer-events:none}
+  #dgLanes button[data-tip]:hover::before{content:"";position:absolute;left:50%;bottom:calc(100% + 3px);
+    transform:translateX(-50%) rotate(45deg);z-index:99;width:8px;height:8px;background:var(--panel);
+    border-left:1px solid var(--line);border-top:1px solid var(--line);pointer-events:none}
+  html[data-theme="light"] #dgLanes button[data-tip]:hover::after{box-shadow:0 6px 20px rgba(60,50,30,.18)}
+  /* 深色主题：未选中用亮色 */
+  #dgLanes button[data-dglane="confirmed"]{color:#ff8b80;border-color:rgba(231,76,60,.6)}
+  #dgLanes button[data-dglane="retired"]{color:#aab4c8;border-color:rgba(170,180,200,.55)}
+  #dgLanes button[data-dglane="observing"]{color:#7ab0ff;border-color:rgba(77,141,255,.6)}
+  /* 浅色主题：未选中用深色，压得住米白底 */
+  html[data-theme="light"] #dgLanes button[data-dglane="confirmed"]{color:#c0392b;border-color:rgba(192,57,43,.5)}
+  html[data-theme="light"] #dgLanes button[data-dglane="retired"]{color:#5f6a7d;border-color:rgba(95,106,125,.5)}
+  html[data-theme="light"] #dgLanes button[data-dglane="observing"]{color:#2f6fe0;border-color:rgba(47,111,224,.5)}
+  #dgLanes button.active[data-dglane="confirmed"]{color:#fff;background:#c0392b;border-color:#a93226;box-shadow:0 1px 5px rgba(192,57,43,.35)}
+  #dgLanes button.active[data-dglane="retired"]{color:#fff;background:#6b7688;border-color:#576173;box-shadow:0 1px 5px rgba(87,97,115,.35)}
+  #dgLanes button.active[data-dglane="observing"]{color:#fff;background:#2f6fe0;border-color:#2459c4;box-shadow:0 1px 5px rgba(36,89,196,.35)}
+  /* 浅色主题的未选中规则带 html 前缀、优先级更高，选中态必须同样带前缀压回去 */
+  html[data-theme="light"] #dgLanes button.active[data-dglane="confirmed"]{color:#fff;background:#c0392b;border-color:#a93226}
+  html[data-theme="light"] #dgLanes button.active[data-dglane="retired"]{color:#fff;background:#6b7688;border-color:#576173}
+  html[data-theme="light"] #dgLanes button.active[data-dglane="observing"]{color:#fff;background:#2f6fe0;border-color:#2459c4}
+  #dgLanes .pill{display:inline-block;min-width:16px;padding:0 5px;margin-left:3px;border-radius:9px;
+    font-size:10px;line-height:15px;background:rgba(127,136,160,.22);color:var(--muted)}
+  html[data-theme="light"] #dgLanes .pill{background:rgba(90,90,90,.1)}
+  #dgLanes button.active .pill{background:rgba(255,255,255,.3);color:#fff}
+  .dg-row{cursor:pointer}
+  .dg-row:hover td{background:rgba(77,141,255,.09)}
+  .dg-row.sel td{background:rgba(77,141,255,.16)}
+  .dg-badge{font-size:10px;padding:1px 7px;border-radius:9px;border:1px solid;white-space:nowrap}
+  .dg-badge.confirmed{color:#ff8b80;border-color:rgba(231,76,60,.5);background:rgba(231,76,60,.12)}
+  .dg-badge.retired{color:var(--muted);border-color:var(--line);background:var(--panel2)}
+  .dg-badge.observe{color:var(--softblue);border-color:rgba(77,141,255,.5);background:rgba(77,141,255,.1)}
+  .dg-badge.sealed{color:#ff8b80;border-color:rgba(231,76,60,.5);background:rgba(231,76,60,.12)}
+  .dg-badge.broken{color:#f5c876;border-color:rgba(245,166,35,.5);background:rgba(245,166,35,.1)}
+  .dg-badge.weak{color:#2ecc71;border-color:rgba(46,204,113,.45);background:rgba(46,204,113,.1)}
+  .dg-badge.pending{color:var(--muted);border-color:var(--line);background:var(--panel2)}
+  .dg-score{font-size:24px;font-weight:600;color:var(--soft)}
+  .dg-score small{font-size:12px;color:var(--muted);font-weight:400}
+  .dg-bar-row{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:11px}
+  .dg-bar-row .dg-bl{width:52px;color:var(--muted);flex:none}
+  .dg-bar-track{flex:1;height:8px;background:var(--track);border-radius:5px;overflow:hidden}
+  /* span 默认 inline，width/height 不生效——必须 block 才能按分数画出填充条 */
+  .dg-bar-fill{display:block;height:100%;border-radius:5px;background:var(--accent);
+    transition:width .35s ease}
+  .dg-bar-row .dg-bv{width:34px;text-align:right;color:var(--soft);flex:none}
+  .dg-reason{font-size:11px;color:var(--metric);line-height:1.7;padding-left:14px;position:relative}
+  .dg-reason::before{content:"·";position:absolute;left:3px;color:var(--accent);font-weight:600}
+  .dg-itrack{display:flex;gap:6px;flex-wrap:wrap;font-size:11px}
+  .dg-itrack .dg-islot{padding:4px 9px;border:1px solid var(--line);border-radius:7px;background:var(--panel2);color:var(--muted)}
+  .dg-itrack .dg-islot b{color:var(--soft);font-weight:600}
+  /* 同题材涨停名单：可点击小卡片 */
+  .dg-peers{display:flex;flex-wrap:wrap;gap:6px;margin-top:5px}
+  .dg-peer{font-size:11px;padding:3px 9px;border-radius:7px;cursor:pointer;
+    border:1px solid rgba(77,141,255,.35);background:rgba(77,141,255,.08);color:var(--softblue);
+    transition:all .15s;white-space:nowrap}
+  .dg-peer:hover,.dg-peer.sel{border-color:rgba(77,141,255,.75);background:rgba(77,141,255,.2);color:#fff}
+  html[data-theme="light"] .dg-peer:hover,html[data-theme="light"] .dg-peer.sel{color:#fff;background:#2f6fe0;border-color:#2459c4}
+  .dg-peer-lbc{font-size:9px;opacity:.75;margin-left:2px}
+  .dg-peer-tag{font-size:9px;margin-left:3px;padding:0 4px;border-radius:5px;
+    background:rgba(245,200,118,.22);color:#f5c876}
+  /* 本股（当前龙头）按钮：琥珀实底，普通同题材股为蓝色描边，一眼区分 */
+  .dg-peer.dg-peer-self{border-color:rgba(245,200,118,.55);color:#f5c876;background:rgba(245,200,118,.1)}
+  .dg-peer.dg-peer-self.sel{color:#3a2b0e;background:#f5c876;border-color:#c9902e;font-weight:700;box-shadow:0 1px 5px rgba(201,144,46,.35)}
+  html[data-theme="light"] .dg-peer.dg-peer-self{color:#9c6a12;border-color:rgba(156,106,18,.5)}
+  html[data-theme="light"] .dg-peer.dg-peer-self.sel{color:#3a2b0e;background:#f5c876;border-color:#c9902e}
   .chart{width:100%;height:360px;min-width:0;max-width:100%}
   /* ===== K 线全屏 ===== */
   .chartwrap{position:relative;min-width:0;max-width:100%}
@@ -1278,6 +1352,7 @@
     <button data-tab="sector">板块</button>
     <button data-tab="focus">关注</button>
     <button data-tab="moves">异动</button>
+    <button data-tab="dragon">擒龙</button>
     <button data-tab="holdings">持仓</button>
     <button data-tab="news">消息</button>
   </nav>
@@ -1507,6 +1582,53 @@
             <div id="mvChart" class="chart" style="height:340px"></div>
             <div class="legend" id="mvLegend"></div>
             <div id="mvInfo" style="display:grid;gap:10px;margin-top:10px"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 擒龙 ================= -->
+    <section id="tab-dragon" class="tab">
+      <div class="two-col focus-layout">
+        <div class="panel">
+          <h3>擒龙 · 双闸门 <span class="hint">闸门一宽进（涨停/触板/首板全收）· 闸门二次日四支柱确认 · 冰点只观察不提示 · 盘中走腾讯快照零东财请求</span></h3>
+          <div class="chips" id="dgMeta"></div>
+          <div class="chips" id="dgLanes">
+            <button data-dglane="confirmed" class="active" data-tip="闸门二次日验证通过：晋级 + 四支柱得分≥68，且非情绪冰点。次日高开承接、封板牢固的强势标的。">确认龙 <span id="dgCntConfirmed" class="pill">0</span></button>
+            <button data-dglane="retired" data-tip="昨日潜龙次日未能晋级（未封板 / 炸板 / 走弱）或得分不足。保留在池里观察反包二波机会，不作为提示重点。">退位龙 <span id="dgCntRetired" class="pill">0</span></button>
+            <button data-dglane="observing" data-tip="闸门一宽进收录的潜龙候选（当日涨停 / 触板 / 首板 / 炸板），尚未经过次日验证；或当前处于情绪冰点，一律只观察不提示。">只观察 <span id="dgCntObserve" class="pill">0</span></button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                <th>代码</th><th>名称</th><th class="num">得分</th>
+                <th class="num">连板</th><th class="num">炸板</th>
+                <th>行业/题材</th><th>阶段</th><th class="num">现价</th><th class="num">涨幅</th>
+                <th>盘中</th>
+              </tr></thead>
+              <tbody id="dgTable"></tbody>
+            </table>
+          </div>
+          <div id="dgEmpty" class="empty">还没有擒龙数据。EOD 后 15:45 会自动建池，你也可以点右侧「重建」手动跑一次。</div>
+        </div>
+        <div class="panel">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+            <h3 id="dgDetailTitle" style="margin:0">标的详情 · 四支柱打分</h3>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+              <button class="mini-btn" id="dgFullInfo" title="在「异动」页打开该股完整详情（基本面 / 研报 / AI 解读）">个股详情</button>
+              <button class="mini-btn" id="dgRunDaily" title="盘后建池+验证（含东财涨停池单次请求）">重建盘后</button>
+              <button class="mini-btn" id="dgRefresh" title="手动跑一次盘中腾讯快照验证（零东财请求）">刷新盘中</button>
+            </div>
+          </div>
+          <div id="dgEmptyDetail" class="empty">点击左侧任一行，查看高度/强度/带动/资金四项得分、晋级理由、盘中三时点轨迹与风险提示。</div>
+          <div id="dgDetail" style="display:none">
+            <div id="dgScore" style="margin:10px 0"></div>
+            <div id="dgBars" style="margin:10px 0"></div>
+            <div id="dgReasons" style="margin:10px 0"></div>
+            <div id="dgPeers" style="margin:10px 0"></div>
+            <div id="dgIntraday" style="margin:10px 0"></div>
+            <div id="dgChart" class="chart" style="height:300px"></div>
+            <div class="legend" id="dgLegend"></div>
           </div>
         </div>
       </div>
@@ -2264,7 +2386,7 @@
     const d = ctx.d;
     if (inst && d) inst.setOption(klineOption(d, ctx.opt || {}), { notMerge: true });
   };
-  const CHART_LEGEND = { focusChart: 'focusLegend', mvChart: 'mvLegend', holdingChart: 'holdingLegend', sectorChart: 'sectorLegend' };
+  const CHART_LEGEND = { focusChart: 'focusLegend', mvChart: 'mvLegend', holdingChart: 'holdingLegend', sectorChart: 'sectorLegend', dgChart: 'dgLegend' };
 
   // 当日分时子图：日K 下方联动的小窗（跟东方财富一样的用法）
   // 鼠标在日K上划过某根 → 立刻显示那天分时；点一下 = 停留查看。开关状态记在本地，四个图位共用。
@@ -7016,13 +7138,18 @@
     $$('#mvViewTabs button[data-mvview]').forEach(b => b.onclick = () => setMvView(b.dataset.mvview));
   }
 
+  // 请求序号：并发打开多只股时（如切换 tab 的默认选中 + 擒龙跳转目标股），
+  // 只允许最新一次写入详情，避免慢请求后完成把页面覆盖成另一只股。
+  let MV_DETAIL_SEQ = 0;
   async function showMoveDetail(r) {
+    const seq = ++MV_DETAIL_SEQ;
     $('#mvEmpty').style.display = 'none';
     $('#mvDetail').style.display = '';
     $('#mvChartTitle').innerHTML = `${r.name} <span class="hint">${r.code} · ${r.industry || '—'} · ${badge(r.stage, r.sub)}${r.pivot ? ` · 关键点 ${fmt(r.pivot)}` : ''}</span>`;
     $('#mvChart').innerHTML = '<div class="empty" style="padding:80px 0">K 线加载中…</div>';
     $('#mvInfo').innerHTML = '<div class="icard"><h5>基本信息</h5><div class="loading">加载中<span class="dot">●</span></div></div>';
     const [chart, prof, live] = await Promise.all([chartOf(r.code), loadProfile(r.code), liveOf(r.code)]);
+    if (seq !== MV_DETAIL_SEQ) return;   // 已有更新的打开请求，丢弃本次结果
     const chartLive = withLiveBar(chart, live);
     if (chartLive) {
       draw('mvChart', chartLive, { pivot: r.pivot, stop: r.stop, code: r.code });
@@ -7542,6 +7669,312 @@
   initListSearch();
   initGlobalSearch();
 
+  // ================= 擒龙 · 双闸门 =================
+  const DG = { data: null, lane: 'confirmed', code: null, chart: null };
+  const DG_LABELS = { confirmed: '确认龙', retired: '退位龙', observing: '只观察' };
+
+  function dgNum(v, digits = 1) {
+    if (v === null || v === undefined || v === '') return '—';
+    const n = Number(v);
+    return Number.isFinite(n) ? n.toFixed(digits) : '—';
+  }
+  function dgChgClass(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return '';
+    return n > 0 ? 'up' : (n < 0 ? 'down' : '');
+  }
+  function dgStateLabel(state) {
+    return { sealed: '封板', broken: '炸板', weak: '走弱', pending: '未表态' }[state] || '—';
+  }
+
+  function renderDragonTab(force = false) {
+    DG.lane = DG.lane || 'confirmed';
+    const load = force || !DG.data;
+    if (load) {
+      api('/api/dragon').then(d => {
+        DG.data = d || {};
+        renderDragonMeta();
+        renderDragonTable();
+      }).catch(e => {
+        const tbody = $('#dgTable');
+        if (tbody) tbody.innerHTML = `<tr><td colspan="10" style="color:var(--muted)">读取失败：${he(e.message || '未知错误')}</td></tr>`;
+      });
+    } else {
+      renderDragonMeta();
+      renderDragonTable();
+    }
+  }
+
+  function renderDragonMeta() {
+    const d = DG.data || {};
+    const meta = $('#dgMeta');
+    if (!meta) return;
+    const s = d.sentiment || {};
+    const regime = { ice: '情绪冰点 · 只观察', hot: '情绪亢奋', normal: '情绪中性', unknown: '情绪未知' }[s.regime] || '情绪—';
+    const regimeColor = s.regime === 'ice' ? 'var(--softblue)'
+      : (s.regime === 'hot' ? 'var(--up)' : 'var(--muted)');
+    const c = d.counts || {};
+    meta.innerHTML = `<span class="flabel">潜龙池</span><b>${he(d.date || '—')}</b>`
+      + (d.verified_on ? `<span class="hint">验证于 ${he(d.verified_on)}</span>` : '')
+      + (d.awaiting_verification ? `<span class="hint" style="color:var(--softblue)">新建池 · 待次日验证</span>` : '')
+      + (d.latest_pool_date && d.latest_pool_date !== d.date
+         ? `<span class="hint">另有新池 ${he(d.latest_pool_date)} 待验证</span>` : '')
+      + (d.intraday_date ? `<span class="hint">盘中 ${he(d.intraday_date)}</span>` : '')
+      + `<span style="color:var(--line)">|</span>`
+      + `<span style="color:${regimeColor}">${he(regime)}</span>`
+      + (s.updown_ratio !== null && s.updown_ratio !== undefined
+         ? `<span class="hint">涨跌比 ${dgNum(s.updown_ratio, 2)} · 涨停 ${s.limit_up ?? '—'} / 跌停 ${s.limit_down ?? '—'}</span>` : '');
+    const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+    set('#dgCntConfirmed', c.confirmed ?? 0);
+    set('#dgCntRetired', c.retired ?? 0);
+    set('#dgCntObserve', c.observing ?? 0);
+  }
+
+  function dgIntraState(code) {
+    const slots = (DG.data && DG.data.intraday) || {};
+    for (const k of ['close', 'mid', 'open']) {
+      const s = slots[k];
+      const it = s && (s.items || []).find(x => x.code === code);
+      if (it) return { state: it.state, slot: k };
+    }
+    return { state: null, slot: null };
+  }
+
+  function renderDragonTable() {
+    const d = DG.data || {};
+    const rows = d[DG.lane] || [];
+    const tbody = $('#dgTable');
+    const empty = $('#dgEmpty');
+    if (!tbody) return;
+    if (empty) empty.style.display = rows.length ? 'none' : '';
+    if (!rows.length) {
+      tbody.innerHTML = `<tr><td colspan="10" style="color:var(--muted)">${d.empty ? '还没有擒龙数据，先跑一次盘后建池。' : '本档暂无标的'}</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = rows.map(r => {
+      const intra = dgIntraState(r.code);
+      const intraHtml = intra.state
+        ? `<span class="dg-badge ${intra.state}">${dgStateLabel(intra.state)}</span>` : '—';
+      const chg = (r.quote || {}).chg;
+      return `<tr class="dg-row ${DG.code === r.code ? 'sel' : ''}" data-code="${he(r.code)}">`
+        + `<td>${he(r.code)}</td><td>${he(r.name || '')}</td>`
+        + `<td class="num">${r.score !== null && r.score !== undefined ? dgNum(r.score, 0) : '—'}</td>`
+        + `<td class="num">${r.now_lbc ?? r.prev_lbc ?? '—'}</td>`
+        + `<td class="num">${r.metrics ? (r.metrics.zbc ?? '—') : '—'}</td>`
+        + `<td>${he(r.industry || '')}</td>`
+        + `<td>${r.stage != null ? 'S' + r.stage : '—'}</td>`
+        + `<td class="num dg-px">${dgNum((r.quote || {}).price)}</td>`
+        + `<td class="num dg-chg ${dgChgClass(chg)}">${chg !== null && chg !== undefined ? dgNum(chg) + '%' : '—'}</td>`
+        + `<td>${intraHtml}</td></tr>`;
+    }).join('');
+    tbody.querySelectorAll('tr.dg-row').forEach(tr => {
+      tr.addEventListener('click', () => {
+        DG.code = tr.dataset.code;
+        tbody.querySelectorAll('tr.dg-row').forEach(x => x.classList.toggle('sel', x === tr));
+        renderDragonDetail(DG.code);
+      });
+    });
+    // 现价/涨幅补缺：后端若跑的是旧代码（current 未带 quote），这里用实时行情接口逐只补齐。
+    // /api/live 走腾讯快照、零东财，不会触发限流；限并发 6，逐格更新不整表重绘。
+    fillDragonQuotesLive(rows, tbody);
+  }
+
+  async function fillDragonQuotesLive(rows, tbody) {
+    const need = (rows || []).filter(r => r && r.code
+      && !(r.quote && r.quote.price !== null && r.quote.price !== undefined));
+    if (!need.length) return;
+    let i = 0;
+    const worker = async () => {
+      while (i < need.length) {
+        const r = need[i++];
+        try {
+          const q = await api('/api/live/' + encodeURIComponent(r.code));
+          if (!q || q.price === null || q.price === undefined) continue;
+          r.quote = Object.assign({}, r.quote, { price: q.price, chg: q.chg, quote_date: q.quote_date });
+          const tr = tbody.querySelector('tr.dg-row[data-code="' + r.code + '"]');
+          if (!tr) continue;
+          const px = tr.querySelector('.dg-px');
+          const cg = tr.querySelector('.dg-chg');
+          if (px) px.textContent = dgNum(q.price);
+          if (cg) {
+            cg.textContent = (q.chg !== null && q.chg !== undefined) ? dgNum(q.chg) + '%' : '—';
+            cg.className = 'num dg-chg ' + dgChgClass(q.chg);
+          }
+        } catch (_) { /* 单只失败不影响其它行 */ }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(6, need.length) }, worker));
+  }
+
+  function renderDragonDetail(code) {
+    const d = DG.data || {};
+    const all = [].concat(d.confirmed || [], d.retired || [], d.observing || []);
+    const it = all.find(x => x.code === code);
+    if (!it) return;
+    const detail = $('#dgDetail');
+    const emptyD = $('#dgEmptyDetail');
+    if (detail) detail.style.display = '';
+    if (emptyD) emptyD.style.display = 'none';
+    const title = $('#dgDetailTitle');
+    if (title) title.textContent = `${it.name || code}（${code}）· 四支柱打分`;
+
+    const parts = it.score_detail || {};
+    const pmax = { height: 25, strength: 25, drive: 25, money: 25 };
+    const plabel = { height: '高度', strength: '强度', drive: '带动', money: '资金' };
+    // 柱子按分数深浅分级，数值差异一眼可见：≥20 强（红）/ ≥15 中上（橙）/
+    // ≥10 中（蓝）/ <10 弱（灰）。深浅主题都用实色，避免浅色主题下四条糊成一片。
+    const barColor = v => v >= 20 ? '#e0392b' : (v >= 15 ? '#ff6b1a'
+      : (v >= 10 ? '#3d7dfa' : '#9aa4b6'));
+    const scoreBox = $('#dgScore');
+    if (scoreBox) {
+      const statusCls = it.status === 'confirmed' ? 'confirmed' : (it.status === 'observe' ? 'observe' : 'retired');
+      scoreBox.innerHTML = `<span class="dg-score">${it.score != null ? dgNum(it.score, 0) : '—'}<small> / 100</small></span>`
+        + ` <span class="dg-badge ${statusCls}">${DG_LABELS[it.status] || it.status || '—'}</span>`
+        + ` <span class="hint">连板 ${it.now_lbc ?? it.prev_lbc ?? '—'} · 晋级 ${it.advanced ? '是' : '否'}</span>`;
+    }
+    const bars = $('#dgBars');
+    if (bars) {
+      if (!Object.keys(parts).length) {
+        bars.innerHTML = `<div class="hint">尚未打分（闸门一出池即观察，等待次日验证）</div>`;
+      } else {
+        bars.innerHTML = Object.keys(plabel).map(k => {
+          const v = parts[k] ?? 0;
+          const pct = Math.max(0, Math.min(100, v / pmax[k] * 100));
+          return `<div class="dg-bar-row"><span class="dg-bl">${plabel[k]}</span>`
+            + `<span class="dg-bar-track"><span class="dg-bar-fill" style="width:${pct}%;background:${barColor(v)}"></span></span>`
+            + `<span class="dg-bv">${v}</span></div>`;
+        }).join('');
+      }
+    }
+    const reasons = $('#dgReasons');
+    if (reasons) {
+      // 把术语翻成人话：首次封板时间 / 连板高度 / 封单质量 / 板块联动 / 资金
+      const explain = t => t
+        .replace(/首封 (\d\d:\d\d:\d\d)/, '首封时间 $1（HH:MM:SS，越早封板越强）')
+        .replace(/(\d+) 连板，进入高位梯队/, '$1 连板（连续 $1 个交易日涨停，高度梯队靠前）')
+        .replace(/全天零炸板，封板质量高/, '全天零炸板（封板后未打开，抛压小、封板质量高）')
+        .replace(/炸板 (\d+) 次，封板不稳/, '炸板 $1 次（封板被打开 $1 次，说明抛压大、封不稳）')
+        .replace(/龙虎榜净买 (\d+) 万/, '龙虎榜净买入 $1 万元（游资席位净买入为正，是资金认可信号）')
+        .replace(/集合竞价即封/, '09:25 集合竞价阶段就已封死，属于最强封板形态')
+        .replace(/开盘后快速封板/, '开盘后很快封板，属于较强封板形态');
+      reasons.innerHTML = (it.reasons || []).length
+        ? `<div class="hint">判断依据（术语口径已翻译成白话）</div>`
+          + it.reasons.map(x => `<div class="dg-reason">${he(explain(x))}</div>`).join('')
+        : `<div class="hint">暂无判断依据</div>`;
+    }
+    // 同题材涨停名单：渲染成可点击小卡片，点一下右侧 K 线切到该股。
+    // 首位固定「本股」按钮（当前龙头自己），点它一键切回，不用回左侧列表重新点。
+    const peersBox = $('#dgPeers');
+    if (peersBox) {
+      const theme = it.industry || it.hybk || '';
+      const others = (it.theme_peers || []).filter(p => p.code !== code);
+      const selfName = it.name || code;
+      const selfLbc = it.now_lbc ?? it.prev_lbc ?? 0;
+      const selfBtn = `<button class="dg-peer dg-peer-self sel" data-code="${he(code)}" title="切回龙头 ${he(selfName)} 的 K 线">`
+        + `${he(selfName)} <span class="dg-peer-tag">本股</span><span class="dg-peer-lbc">${selfLbc}板</span></button>`;
+      const otherBtns = others.map(p =>
+        `<button class="dg-peer" data-code="${he(p.code)}" title="点击查看 ${he(p.name)} 的 K 线">`
+        + `${he(p.name)} <span class="dg-peer-lbc">${p.lbc}板</span></button>`).join('');
+      const header = theme
+        ? `<div class="hint">题材「<b style="color:var(--soft)">${he(theme)}</b>」· 同题材涨停 ${others.length + 1} 只 · 点击个股切换右侧 K 线</div>`
+        : `<div class="hint">点击个股切换右侧 K 线</div>`;
+      peersBox.innerHTML = header + `<div class="dg-peers">` + selfBtn + otherBtns + `</div>`;
+      peersBox.querySelectorAll('.dg-peer').forEach(b => b.onclick = () => {
+        // 只在详情区展示该股 K 线，不切左档位（保持当前确认/退位龙视图不变）
+        drawDragonChart(b.dataset.code);
+        peersBox.querySelectorAll('.dg-peer').forEach(x => x.classList.toggle('sel', x === b));
+      });
+    }
+    const intra = $('#dgIntraday');
+    if (intra) {
+      const slots = (d.intraday || {});
+      const chip = (k, label) => {
+        const s = slots[k];
+        if (!s) return '';
+        const row = (s.items || []).find(x => x.code === code);
+        if (!row) return '';
+        return `<span class="dg-islot">${label} <b class="${dgChgClass(row.chg)}">${row.chg != null ? dgNum(row.chg) + '%' : dgStateLabel(row.state)}</b>`
+          + ` · <span class="dg-badge ${row.state}">${dgStateLabel(row.state)}</span></span>`;
+      };
+      const chips = chip('open', '09:35') + chip('mid', '10:00') + chip('close', '14:45');
+      intra.innerHTML = `<div class="hint">盘中晋级轨迹（腾讯快照）</div><div class="dg-itrack">`
+        + (chips || '<span class="dg-islot">暂无盘中数据</span>') + `</div>`;
+    }
+    // 统一图位渲染（分时 / 全屏 / 周期切换由图位系统提供）
+    drawDragonChart(code);
+  }
+
+  // 擒龙 K 线：统一走图位系统（与关注/异动/持仓一致），自动获得
+  // 日K/周/月/年 + 分时切换 + 当日分时子图 + 全屏 + 滚轮缩放 + 中文 tooltip。
+  // 同题材个股点击时传 code 即可复用同一图位，不新增 ECharts 实例。
+  async function drawDragonChart(code) {
+    const el = $('#dgChart');
+    if (!el || !code) return;
+    el.innerHTML = '<div class="empty" style="padding:70px 0">K 线加载中…</div>';
+    try {
+      const [chart, live] = await Promise.all([chartOf(code), liveOf(code)]);
+      const withLive = withLiveBar(chart, live);
+      if (!withLive) { el.innerHTML = '<div class="empty">暂无该股 K 线数据</div>'; return; }
+      // 检查最新一根是否一字板，补一条人话提示到图例下方
+      const bs = withLive.bars || [];
+      const last = bs[bs.length - 1];
+      const isOne = last && last[0] === last[1] && last[1] === last[2] && last[2] === last[3];
+      draw('dgChart', withLive, { code: code });
+      const lg = $('#dgLegend');
+      if (lg) lg.innerHTML = legendHtml(withLive)
+        + (isOne ? `<span class="hint" style="color:#f5c876">◆ 最新交易日为一字板（开=高=低=收），K 线呈一条细线属正常现象</span>` : '');
+    } catch (e) {
+      el.innerHTML = '<div class="empty">K 线加载失败：' + he(e.message || '未知错误') + '</div>';
+    }
+  }
+
+  function initDragonTab() {
+    $$('#dgLanes button').forEach(b => b.addEventListener('click', () => {
+      DG.lane = b.dataset.dglane;
+      $$('#dgLanes button').forEach(x => x.classList.toggle('active', x === b));
+      renderDragonTable();
+    }));
+    const rb = $('#dgRunDaily');
+    if (rb) rb.addEventListener('click', async () => {
+      rb.disabled = true; const old = rb.textContent; rb.textContent = '运行中…';
+      try { await apiSend('/api/dragon/run?mode=daily', 'POST', {}); DG.data = null; renderDragonTab(true); }
+      catch (e) { toast('重建失败：' + (e.message || '未知错误')); }
+      finally { rb.disabled = false; rb.textContent = old; }
+    });
+    const rf = $('#dgRefresh');
+    if (rf) rf.addEventListener('click', async () => {
+      rf.disabled = true; const old = rf.textContent; rf.textContent = '刷新中…';
+      try { await apiSend('/api/dragon/run?mode=intraday&slot=close', 'POST', {}); DG.data = null; renderDragonTab(true); }
+      catch (e) { toast('刷新失败：' + (e.message || '未知错误')); }
+      finally { rf.disabled = false; rf.textContent = old; }
+    });
+    // 个股详情：切到「异动」tab 并复用其完整详情（基本信息 / 基本面 / 研报 / AI 解读）。
+    // 注意：不能依赖异动池查找目标股——擒龙标的常不在异动池里，且 renderMovesTab 会
+    // 默认打开异动池第一行（比如汇洲智能），造成「选了克来机电却打开汇洲智能」。
+    // 做法：先把 MVS.code 设为目标（让默认选中逻辑失效），再用擒龙当前 item 直接喂详情。
+    const fi = $('#dgFullInfo');
+    if (fi) fi.addEventListener('click', async () => {
+      if (!DG.code) { toast('请先在左侧选中一只标的', true); return; }
+      const code = DG.code;
+      // 从擒龙三档里取当前标的（含 name/industry/stage 等，足够 showMoveDetail 用）
+      const d = DG.data || {};
+      const it = [].concat(d.confirmed || [], d.retired || [], d.observing || [])
+        .find(x => x.code === code);
+      const row = it ? {
+        code: it.code, name: it.name || it.code, industry: it.industry,
+        stage: it.stage, sub: it.sub, pivot: it.pivot, stop: it.stop,
+        price: (it.quote || {}).price, chg: (it.quote || {}).chg,
+        fromDragon: true,
+      } : { code, name: code, fromDragon: true };
+      MVS.code = code;                       // 关键：先占位，阻止默认选中第一行
+      switchTab('moves');
+      await renderMovesTab(false);
+      showMoveDetail(row);                   // 用目标股覆盖，确保详情就是刚选的标的
+      markSelected('#mvTable', code);        // 若在异动池内则高亮，否则无行可高亮（无害）
+    });
+  }
+  initDragonTab();
+
   // ================= 交互 =================
   let current = 'market';
   function switchTab(name) {
@@ -7551,6 +7984,7 @@
     if (name === 'sector') renderSectorTab(false);
     if (name === 'focus') renderFocusTab(false);
     if (name === 'moves') renderMovesTab(false);
+    if (name === 'dragon') renderDragonTab(false);
     if (name === 'holdings') renderHoldingsTab(false);
     if (name === 'market') renderMarket();
     if (name === 'news') renderNewsTab(true);   // 离开页面时轮询暂停，回来必须强制重读索引
@@ -7625,6 +8059,7 @@
   const FS_HOSTS = [
     { id: 'focusChart', title: () => ($('#focusChartTitle') || {}).innerHTML || '标的关键点图' },
     { id: 'mvChart', title: () => ($('#mvChartTitle') || {}).innerHTML || '异动个股详情' },
+    { id: 'dgChart', title: () => ($('#dgDetailTitle') || {}).innerHTML || '擒龙标的详情' },
     { id: 'sectorChart', title: () => ($('#sectorChartTitle') || {}).innerHTML || '行业趋势' },
     { id: 'holdingChart', title: () => {
         const n = $('#hdName'), c = $('#hdCode');
@@ -7634,9 +8069,9 @@
   ];
 
   // 支持「日K / 分时」切换的图位（板块指数图不做，指数分时用另一套接口）
-  const MODE_HOSTS = ['focusChart', 'mvChart', 'holdingChart'];
+  const MODE_HOSTS = ['focusChart', 'mvChart', 'holdingChart', 'dgChart'];
   // 支持「日K / 周 / 月 / 年」周期切换的图位（个股 + 板块指数）
-  const PERIOD_HOSTS = ['focusChart', 'mvChart', 'holdingChart', 'sectorChart'];
+  const PERIOD_HOSTS = ['focusChart', 'mvChart', 'holdingChart', 'sectorChart', 'dgChart'];
   // 调试/分享钩子：URL 带 #period=week|month|year 时，图位初始即用该周期
   const INIT_PERIOD = (location.hash.match(/period=(week|month|year)/) || [])[1] || null;
 

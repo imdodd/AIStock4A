@@ -204,6 +204,26 @@ def h_news_round(params: dict, ctx: dict) -> dict:
     return _subprocess("jobs.fetch_news", args, ctx)
 
 
+def h_dragon(params: dict, ctx: dict) -> dict:
+    """擒龙任务：按 mode 分盘后（建池+验证）与盘中（腾讯快照验证）。
+
+    mode=daily   跑 jobs.dragon_daily（闸门一建池 + 闸门二验证）。
+    mode=intraday 跑 jobs.dragon_intraday --slot {open|mid|close}（零东财请求）。
+    盘中任务用交易日过滤（默认 all_days=False），节假日不跑。
+    """
+    g = _guard(ctx, "dragon", {"mode": params.get("mode")})
+    if g:
+        return g
+    mode = str(params.get("mode") or "daily")
+    if mode == "intraday":
+        slot = str(params.get("slot") or "open")
+        return _subprocess("jobs.dragon_intraday", ["--slot", slot],
+                           {**ctx, "timeout": int(params.get("timeout") or 300)})
+    # daily
+    return _subprocess("jobs.dragon_daily", [],
+                       {**ctx, "timeout": int(params.get("timeout") or 600)})
+
+
 def h_tracking_review(params: dict, ctx: dict) -> dict:
     """跟踪期产出：真的去跑 jobs.tracking_review，不再只回报工作集。
 
@@ -266,6 +286,7 @@ JOB_HANDLERS: dict[str, Callable[[dict, dict], dict]] = {
     "sector_map": h_sector_map,
     "pregen": h_pregen,
     "news_round": h_news_round,
+    "dragon": h_dragon,
     "tracking_review": h_tracking_review,
     "weekly_review": h_weekly_review,
     "quarterly_review": h_quarterly_review,
@@ -298,6 +319,20 @@ FIXED_JOBS: tuple[dict, ...] = (
     # 15:50 在 EOD（15:30 起，约 8 分钟）之后，确保事件巡检读到当天新快照。
     {"id": "track_event", "job_type": "event_watch", "cron": "50 15 * * 1-5",
      "params": {}, "note": "事件维度兜底巡检（在 EOD 完成后）"},
+    # 擒龙：盘后建池+验证排在 EOD（15:30 起约 8 分钟）与事件巡检之后。
+    # 盘中三个时点只走腾讯快照，零东财请求；交易日过滤由 core 默认执行。
+    {"id": "dragon_daily", "job_type": "dragon", "cron": "45 15 * * 1-5",
+     "params": {"mode": "daily"},
+     "note": "擒龙盘后：闸门二验证上一交易日潜龙 + 闸门一建今日潜龙池（东财涨停池单次缓存）"},
+    {"id": "dragon_open", "job_type": "dragon", "cron": "35 9 * * 1-5",
+     "params": {"mode": "intraday", "slot": "open"},
+     "note": "擒龙盘中 09:35：腾讯快照查潜龙开盘晋级/破板（零东财请求）"},
+    {"id": "dragon_mid", "job_type": "dragon", "cron": "0 10 * * 1-5",
+     "params": {"mode": "intraday", "slot": "mid"},
+     "note": "擒龙盘中 10:00：腾讯快照查潜龙晋级/破板（零东财请求）"},
+    {"id": "dragon_close", "job_type": "dragon", "cron": "45 14 * * 1-5",
+     "params": {"mode": "intraday", "slot": "close"},
+     "note": "擒龙盘中 14:45：腾讯快照查潜龙尾盘晋级/破板（零东财请求）"},
 )
 
 __all__ = ["JOB_HANDLERS", "FIXED_JOBS", "CAD_BUCKETS", "work_items"]
