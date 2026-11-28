@@ -423,15 +423,36 @@ def sector_snapshot(fresh: bool = False) -> dict:
 
 # ---------------------------------------------------------------- 历史
 
-def history(bk: str, days: int = 15) -> dict:
-    """单板块近 N 个交易日主力资金流。
+HIST_KEEP = 120          # 缓存里最多留多少个交易日，与 history() 的上限一致
 
-    东财 BK 代码走 fflow/daykline（逐日 + 超大/大单拆分）；腾讯 pt 代码没有逐日
-    历史，退化为「今日 / 近5日 / 近20日」三段摘要，返回结构仍是 days[]，前端
-    柱图可直接画。
+
+def _save_hist_cache(cpath: str, out: dict) -> None:
+    """落盘盘后资金流，保留「抓到过的最长一段」。
+
+    缓存文件按板块一份、文件名不含 days：先看 30 日再看 15 日时，若直接覆盖
+    就把 30 日缩成 15 日，等到东财限流、只能读缓存时，30 日视图只剩 15 根柱。
+    这里按日期做并集，同一天以本次抓到的为准（当日盘中主力净额还会变）。
+    """
+    old = (_read_json(cpath) or {}).get("data") or {}
+    old_days = old.get("days") or []
+    days = list(out["days"])
+    if len(old_days) > len(days):
+        merged = {d.get("date"): d for d in old_days if d.get("date")}
+        merged.update({d.get("date"): d for d in days if d.get("date")})
+        days = [merged[k] for k in sorted(merged) if merged[k]][-HIST_KEEP:]
+    _write_json(cpath, {"saved_at": out["asof"], "data": dict(out, days=days)})
+
+
+def history(bk: str, days: int = 30) -> dict:
+    """单板块近 N 个交易日主力资金流（N 上限 120）。
+
+    东财 BK 代码走 fflow/daykline（逐日 + 超大/大单拆分），实测能回溯 120 个
+    交易日（2026-06-04 起），所以这里不再卡 30；腾讯 pt 代码没有逐日历史，
+    退化为「今日 / 近5日 / 近20日」三段摘要，返回结构仍是 days[]，前端柱图
+    可直接画。
     """
     bk = str(bk or "").strip().upper()
-    days = max(1, min(30, int(days or 15)))
+    days = max(1, min(120, int(days or 30)))
 
     if bk.startswith("PT"):
         return _tx_history(bk)
@@ -471,17 +492,20 @@ def history(bk: str, days: int = 15) -> dict:
                 out = {"bk": bk, "name": data.get("name"), "source": "eastmoney",
                        "stale": False, "asof": _now(), "days": items}
                 _MEM["hist"][mkey] = (time.time(), out)
-                _write_json(cpath, {"saved_at": out["asof"], "data": out})
+                _save_hist_cache(cpath, out)
                 return out
             raise RuntimeError("fflow 返回空")
         except Exception as e:  # noqa: BLE001
             _trip(f"东财 fflow {type(e).__name__}: {e}", host="push2his.eastmoney.com")
 
-    ck = (_read_json(cpath) or {}).get("data") or {}
+    ck_obj = _read_json(cpath) or {}
+    ck = ck_obj.get("data") or {}
     if ck.get("days"):
         out = dict(ck)
+        # 缓存可能比本次请求更长（落盘留最长一段），按请求裁掉头部
+        out["days"] = (ck.get("days") or [])[-days:]
         out.update({"stale": True, "note": "东财限流，显示缓存数据",
-                    "asof": (_read_json(cpath) or {}).get("saved_at") or out.get("asof")})
+                    "asof": ck_obj.get("saved_at") or out.get("asof")})
         _MEM["hist"][mkey] = (time.time(), out)
         return out
     raise RuntimeError("板块资金流历史取数失败，且无本地缓存")

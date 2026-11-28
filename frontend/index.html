@@ -459,8 +459,8 @@
   .flow-chart-head{font-size:12px;font-weight:600;color:var(--soft);margin-bottom:4px}
   .flow-chart-head .sub{font-weight:400;color:var(--muted);font-size:11px;margin-left:8px}
   .flow-chart-head .sum{display:block;margin:2px 0 0;font-weight:600;font-size:11px;color:var(--softblue)}
-  /* 15 日明细：压成两行内滚动，避免把大盘面板撑高 */
-  .legend.flow-legend{gap:3px 10px;font-size:10px;margin-top:6px;max-height:40px;overflow-y:auto;line-height:16px}
+  /* 资金流明细：30 日约 5 行，先全部露出来；再长（>60 日）才在框内滚动 */
+  .legend.flow-legend{gap:3px 10px;font-size:10px;margin-top:6px;max-height:88px;overflow-y:auto;line-height:16px}
   .legend.flow-legend span{white-space:nowrap}
   /* 资金流口径提示条：东财 496 个行业 ≠ 本地 124 个申万二级 */
   .flow-map-note{margin:8px 0 6px;padding:8px 12px;border-radius:9px;font-size:11.5px;line-height:1.75;
@@ -476,7 +476,7 @@
     border-color:rgba(226,86,10,.30);color:#5a4632}
   html[data-theme="light"] .flow-map-note b{color:#c24808}
   html[data-theme="light"] .flow-map-note .close{color:#9a8f86}
-  /* 板块页右侧：资金流行业自己的成分股 / 15 日资金 */
+  /* 板块页右侧：资金流行业自己的成分股 / N 日资金（与大盘模块共用 FLOW_DAYS） */
   .sfd-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
   .sfd-head b{font-size:14px;color:var(--soft)}
   .sfd-head .bk{font-size:11px;color:var(--muted)}
@@ -1690,7 +1690,7 @@
         </div>
       </div>
       <div class="panel">
-        <h3>行业资金流 · 申万 <span class="hint">主力净流入 = 超大单 + 大单 · 单击看近 15 日对比 · 双击进入板块（自动映射到本地 124 个二级）</span></h3>
+        <h3>行业资金流 · 申万 <span class="hint">主力净流入 = 超大单 + 大单 · 单击看近 30 日对比 · 双击进入板块（自动映射到本地 124 个二级）</span></h3>
         <div id="flowSrc" style="margin:-6px 0 8px;font-size:11px;color:var(--muted)"></div>
         <div class="flow-grid">
           <div>
@@ -1702,7 +1702,7 @@
             <div id="flowOut"></div>
           </div>
           <div class="flow-right">
-            <div class="flow-chart-head" id="flowChartHead">点击左侧任一板块，查看近 15 日主力资金对比</div>
+            <div class="flow-chart-head" id="flowChartHead">点击左侧任一板块，查看近 30 日主力资金对比</div>
             <div id="flowChart" style="height:224px"></div>
             <div class="legend flow-legend" id="flowLegend"></div>
           </div>
@@ -3297,7 +3297,9 @@
 
   // ================= 行业资金流（申万二级 · 东财口径） =================
   const FLOW = { rows: null, sel: null, loading: false, pending: null };
-  const FLOW_DAYS = 15;               // 右侧主力资金柱图的回溯交易日数（东财 fflow/daykline 上限内）
+  // 右侧主力资金柱图的回溯交易日数。东财 fflow/daykline 实测能回溯 120 个交易日
+  // （2026-06-04 起），这里取 30 个 ≈ 一个半月，够看一轮板块轮动，柱子也不会细到看不清。
+  const FLOW_DAYS = 30;
 
   function flowRowHtml(r, i) {
     const mv = r.main == null ? '—' : `${r.main >= 0 ? '+' : ''}${(r.main / 1e8).toFixed(2)}亿`;
@@ -3311,7 +3313,7 @@
                  data-local="${he(r.local_name || '')}" data-match="${he(r.match || 'none')}"
                  data-coverage="${he(r.coverage || 0)}" data-hits="${he(r.hits || 0)}"
                  data-total="${he(r.total || 0)}" data-via="${he(r.via || '')}"
-                 title="单击看近 15 日资金 · 双击进入板块模块定位该行业">
+                 title="单击看近 30 日资金 · 双击进入板块模块定位该行业">
       <span class="rk">${i + 1}</span>
       <span class="nm">${he(r.name)}${st}</span>
       <span class="ch ${upDown(r.chg)}">${pct(r.chg)}</span>
@@ -3452,7 +3454,7 @@
     if (!el) return;
     if (el.clientWidth < 50) { FLOW.pending = h; return; }   // 面板隐藏，切回大盘再画
 
-    // 15 日摘要：累计净额 / 净流入天数 / 单日峰值，放在标题右侧
+    // N 日摘要：累计净额 / 净流入天数 / 单日峰值，放在标题右侧
     const vals = days.filter(d => d.main != null);
     const sum = vals.reduce((a, d) => a + d.main, 0) / 1e8;
     const pos = vals.filter(d => d.main >= 0).length;
@@ -3907,7 +3909,7 @@
       delete S.chartsInst['sfdChart'];
     }
     if (!days.length) {
-      el.innerHTML = '<div class="empty">该行业暂无近 15 日资金历史</div>';
+      el.innerHTML = `<div class="empty">该行业暂无近 ${FLOW_DAYS} 日资金历史</div>`;
       return;
     }
     const inst = echarts.init(el);

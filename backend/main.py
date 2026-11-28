@@ -1171,8 +1171,8 @@ def upstream_status():
 
 
 @app.get("/api/market/flow/history")
-def market_flow_history(bk: str, days: int = 15):
-    """单板块近 N 日主力资金流（默认 15 日），供 15 日连续对比。
+def market_flow_history(bk: str, days: int = 30):
+    """单板块近 N 日主力资金流（默认 30 日，上限 120 日），供连续对比。
 
     BK 代码（东财）返回逐日 + 超大/大单拆分；PT 代码（腾讯备源）没有逐日历史，
     返回「今日 / 近5日 / 近20日」三段摘要，结构一致、前端可直接画柱图。
@@ -1194,7 +1194,7 @@ _FLOW_SECTOR: dict[str, tuple[float, dict]] = {}
 
 @app.get("/api/market/flow/sector")
 def market_flow_sector(bk: str):
-    """单个东财申万行业的详情：真实成分股 + 近 15 日资金 + 本地近似板块。
+    """单个东财申万行业的详情：真实成分股 + 近 30 日资金 + 本地近似板块。
 
     首页资金流的行业清单（496 个）与板块模块（124 个本地申万二级）不是同一套
     分类，像「集成电路制造」在本地根本没有同名行。这个接口让板块页可以直接
@@ -1265,7 +1265,7 @@ def market_flow_sector(bk: str):
         raise HTTPException(502, f"{name} 成分股取数失败：{type(fetch_err).__name__}: {fetch_err}")
 
     try:
-        days = history(bk, 15).get("days") or []
+        days = history(bk, 30).get("days") or []
     except Exception:
         days = []
     mp = (_load_map() or {}).get(bk) or {}
