@@ -27,7 +27,7 @@ import time as _time
 from datetime import datetime
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -206,7 +206,11 @@ def _focus_pool() -> dict:
 
 
 @app.get("/api/signals")
-def signals(type: str | None = None, grade: str | None = None, limit: int = 200):
+def signals(response: Response, type: str | None = None, grade: str | None = None,
+            limit: int = 200):
+    # 关注池每日被 EOD 覆盖写，浏览器/代理一旦缓存住旧 JSON，F5 也看不出变化：
+    # 名字和价格还是前一交易日的版本，看起来像「关注模块没更新」。
+    response.headers["Cache-Control"] = "no-store"
     rows = _focus_pool()["items"]
     if type in ("buy", "sell"):
         rows = [r for r in rows if r.get("type") == type]
@@ -216,8 +220,9 @@ def signals(type: str | None = None, grade: str | None = None, limit: int = 200)
 
 
 @app.get("/api/focus/pool")
-def focus_pool():
+def focus_pool(response: Response):
     """关注池口径元信息（扫描只数 / 入选只数 / 规则 / 数据日），供前端标题展示。"""
+    response.headers["Cache-Control"] = "no-store"
     d = _focus_pool()
     return {"code": 0,
             "data": {"meta": d.get("meta") or {}, "items": d.get("items") or [],
@@ -739,7 +744,7 @@ def alerts():
 
 
 @app.get("/api/chart/{code}")
-def chart(code: str, refresh: int = 0, period: str = "day"):
+def chart(code: str, response: Response, refresh: int = 0, period: str = "day"):
     """K 线图数据。
 
     period=day      → 原有日线（快照缓存 / 现场生成，含阶段带、信号、枢轴）
@@ -748,6 +753,9 @@ def chart(code: str, refresh: int = 0, period: str = "day"):
     快照里已有的标的直接读文件；行业下钻点到的成分股没有预生成文件，
     这里改用公开行情接口现场抓 K 线并计算（约 0.3 秒），结果落盘缓存。
     """
+    # charts/pt*.json 每日被快照覆盖写。浏览器若启发式缓存住旧 JSON，
+    # 图上仍是上一版 K 线，看起来就像「数据没更新 / 有断层」。
+    response.headers["Cache-Control"] = "no-store"
     # 板块指数（pt 开头）：K 线由 EOD 从东财 BK 源补齐后写入 klines.json，
     # 再由 build_snapshot 生成 charts/pt*.json。这里优先读该缓存并正常返回，
     # 前端点板块才能出图。只有缓存确实不存在/无数据时才回落空图，
@@ -1149,6 +1157,19 @@ def market_flow():
     return {"code": 0, "data": payload, "meta": _meta()}
 
 
+@app.get("/api/upstream/status")
+def upstream_status():
+    """上游连通性诊断：一眼区分「代理端口挂了」还是「东财把 IP 封了」。
+
+    这两种故障在日志里都表现为 curl rc=56 schannel，极易误判——前者改代理
+    配置即可，后者只能冷处理等解禁，处理方向完全相反，所以单独暴露出来。
+    2026-11-27 P0：熔断状态改由 nethttp 统一维护（按 host、跨进程共享），
+    这里直接读聚合结果，覆盖东财全部域名而不只是板块资金流那一条链路。
+    """
+    from datasource import nethttp
+    return {"code": 0, "data": nethttp.status(), "meta": _meta()}
+
+
 @app.get("/api/market/flow/history")
 def market_flow_history(bk: str, days: int = 15):
     """单板块近 N 日主力资金流（默认 15 日），供 15 日连续对比。
@@ -1354,6 +1375,20 @@ def dragon(date: str | None = None, refresh: int = 0):
     return {"code": 0, "data": dg.current(date), "meta": _meta()}
 
 
+@app.get("/api/dragon/dates")
+def dragon_dates(limit: int = 20):
+    """擒龙可回溯日期列表（含已验证 + 最新待验证池），零网络只读落盘。"""
+    from engines import dragon as dg
+    return {"code": 0, "data": dg.history_dates(min(max(limit, 1), 60)), "meta": _meta()}
+
+
+@app.get("/api/dragon/evolution")
+def dragon_evolution(days: int = 10):
+    """龙头接力矩阵 + 每日交接摘要，跨日聚合已有 verdict，零网络。"""
+    from engines import dragon as dg
+    return {"code": 0, "data": dg.evolution(min(max(days, 2), 30)), "meta": _meta()}
+
+
 @app.post("/api/dragon/run")
 def dragon_run(mode: str = "daily", date: str | None = None, slot: str = "close"):
     """手动触发擒龙任务（盘后建池 / 盘中验证），返回子进程日志。"""
@@ -1364,11 +1399,15 @@ def dragon_run(mode: str = "daily", date: str | None = None, slot: str = "close"
 
 
 @app.get("/api/ai/case/{code}")
-def ai_case(code: str, date: str | None = None, refresh: int = 0):
-    """异动证据包（公告/龙虎榜/资金流/分时/涨停池 + 本地盘口板块），当日缓存"""
+def ai_case(code: str, date: str | None = None, refresh: int = 0, hard: int = 0):
+    """异动证据包（公告/龙虎榜/资金流/分时/涨停池 + 本地盘口板块）。
+
+    refresh=1 只重取「盘中会变」的源（分时/日K/资金流），公告/龙虎榜/新闻命中缓存；
+    hard=1    才是全部重打，给排查与人工兜底用。
+    """
     from datasource import evidence
     try:
-        d = evidence.build_case(code, date, refresh=bool(refresh))
+        d = evidence.build_case(code, date, refresh=bool(refresh), hard=bool(hard))
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"证据获取失败：{e}")
     return {"code": 0, "data": d, "meta": _meta()}

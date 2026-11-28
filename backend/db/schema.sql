@@ -1,4 +1,4 @@
--- AIStock4A 存储层 DDL（SQLite 方言）
+-- astock-v2 存储层 DDL（SQLite 方言）
 --
 -- 设计口径：
 --   1) 只把「用户手写 / 不可重建 / 需要事务」的资产入库；raw/ snapshot/ cases/
@@ -106,6 +106,9 @@ CREATE TABLE IF NOT EXISTS news_daily (
 );
 
 -- 阶段 4：同一交易日同一任务只跑一次，靠主键去重
+--   pid：占位进程号。status='running' 且 pid 不是当前进程的，说明上个进程
+--   还没来得及收尾就退出了（重启 / 被杀），属于孤儿占位，启动时必须回收，
+--   否则这条行会让当天该任务被当成 duplicate 永久跳过。
 CREATE TABLE IF NOT EXISTS job_runs (
   owner       TEXT NOT NULL DEFAULT 'default',
   job_type    TEXT NOT NULL,
@@ -114,6 +117,7 @@ CREATE TABLE IF NOT EXISTS job_runs (
   started_at  TEXT,
   finished_at TEXT,
   detail      TEXT,
+  pid         INTEGER,
   PRIMARY KEY (owner, job_type, trade_date)
 );
 CREATE INDEX IF NOT EXISTS ix_job_runs_type ON job_runs(owner, job_type, trade_date DESC);

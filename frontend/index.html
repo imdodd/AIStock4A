@@ -661,23 +661,117 @@
   html[data-theme="light"] #dgLanes button[data-tip]:hover::after{box-shadow:0 6px 20px rgba(60,50,30,.18)}
   /* 深色主题：未选中用亮色 */
   #dgLanes button[data-dglane="confirmed"]{color:#ff8b80;border-color:rgba(231,76,60,.6)}
+  #dgLanes button[data-dglane="pending"]{color:#c0b0ff;border-color:rgba(139,124,246,.6)}
   #dgLanes button[data-dglane="retired"]{color:#aab4c8;border-color:rgba(170,180,200,.55)}
   #dgLanes button[data-dglane="observing"]{color:#7ab0ff;border-color:rgba(77,141,255,.6)}
   /* 浅色主题：未选中用深色，压得住米白底 */
   html[data-theme="light"] #dgLanes button[data-dglane="confirmed"]{color:#c0392b;border-color:rgba(192,57,43,.5)}
+  html[data-theme="light"] #dgLanes button[data-dglane="pending"]{color:#6d4dd6;border-color:rgba(109,77,214,.5)}
   html[data-theme="light"] #dgLanes button[data-dglane="retired"]{color:#5f6a7d;border-color:rgba(95,106,125,.5)}
   html[data-theme="light"] #dgLanes button[data-dglane="observing"]{color:#2f6fe0;border-color:rgba(47,111,224,.5)}
   #dgLanes button.active[data-dglane="confirmed"]{color:#fff;background:#c0392b;border-color:#a93226;box-shadow:0 1px 5px rgba(192,57,43,.35)}
+  #dgLanes button.active[data-dglane="pending"]{color:#fff;background:#6d5bd0;border-color:#5b4ab8;box-shadow:0 1px 5px rgba(109,91,208,.35)}
   #dgLanes button.active[data-dglane="retired"]{color:#fff;background:#6b7688;border-color:#576173;box-shadow:0 1px 5px rgba(87,97,115,.35)}
   #dgLanes button.active[data-dglane="observing"]{color:#fff;background:#2f6fe0;border-color:#2459c4;box-shadow:0 1px 5px rgba(36,89,196,.35)}
   /* 浅色主题的未选中规则带 html 前缀、优先级更高，选中态必须同样带前缀压回去 */
   html[data-theme="light"] #dgLanes button.active[data-dglane="confirmed"]{color:#fff;background:#c0392b;border-color:#a93226}
+  html[data-theme="light"] #dgLanes button.active[data-dglane="pending"]{color:#fff;background:#6d5bd0;border-color:#5b4ab8}
   html[data-theme="light"] #dgLanes button.active[data-dglane="retired"]{color:#fff;background:#6b7688;border-color:#576173}
   html[data-theme="light"] #dgLanes button.active[data-dglane="observing"]{color:#fff;background:#2f6fe0;border-color:#2459c4}
   #dgLanes .pill{display:inline-block;min-width:16px;padding:0 5px;margin-left:3px;border-radius:9px;
     font-size:10px;line-height:15px;background:rgba(127,136,160,.22);color:var(--muted)}
   html[data-theme="light"] #dgLanes .pill{background:rgba(90,90,90,.1)}
   #dgLanes button.active .pill{background:rgba(255,255,255,.3);color:#fff}
+  /* 擒龙 · 日期回溯器 */
+  .dg-dates{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:7px 0}
+  .dg-dates button{border-radius:7px;padding:3px 9px;font-size:11px;border:1px solid var(--line);
+    background:var(--panel2);color:var(--muted);transition:all .15s}
+  .dg-dates button:hover{filter:brightness(1.12)}
+  .dg-dates button.active{border-color:#c9902e;background:rgba(201,144,46,.18);color:#f5c876;font-weight:700}
+  html[data-theme="light"] .dg-dates button.active{border-color:#b8801e;background:rgba(184,128,30,.14);color:#8a5d10}
+  .dg-date-tag{font-size:9px;opacity:.8;margin-left:2px}
+  /* 擒龙 · 今日新池入口：当天建的池子要等次日走势才能定性，默认视图仍停在
+     最近一份已验证的池子上，容易让人以为「今天没数据」。给一个显式入口。 */
+  .dg-newpool{font:inherit;font-size:11px;margin-left:6px;padding:1px 8px;border-radius:999px;
+    border:1px solid rgba(77,141,255,.45);background:rgba(77,141,255,.12);color:var(--softblue);cursor:pointer}
+  .dg-newpool:hover{background:rgba(77,141,255,.24)}
+  html[data-theme="light"] .dg-newpool{border-color:rgba(47,111,224,.45);background:rgba(47,111,224,.1);color:#2f6fe0}
+  /* 回程按钮：和「今日新池」区分开，用中性描边，别抢主信息的注意力 */
+  .dg-newpool.dg-back{border-color:rgba(170,180,200,.5);background:rgba(170,180,200,.1);color:var(--muted)}
+  .dg-newpool.dg-back:hover{background:rgba(170,180,200,.22);color:var(--text)}
+  html[data-theme="light"] .dg-newpool.dg-back{border-color:rgba(95,106,125,.4);background:rgba(95,106,125,.08);color:#5f6a7d}
+  /* 擒龙 · 左栏 tab 容器要继承 focus-layout 的伸展能力，否则包一层后表格不再撑满 */
+  #dgViewList,#dgViewMatrix{display:flex;flex-direction:column;min-height:0;flex:1 1 auto}
+  #dgViewList .table-wrap{flex:1 1 auto;min-height:200px;max-height:none}
+  #dgViewMatrix .dg-mx-scroll{flex:1 1 auto;min-height:200px;max-height:none}
+  /* 擒龙 · 左栏视图切换：龙头列表 / 接力矩阵（同一组"选标的"视角） */
+  .dg-views{display:inline-flex;gap:3px;padding:2px;border-radius:8px;background:var(--panel2);border:1px solid var(--line)}
+  #dgLeftViews{margin:7px 0}
+  .dg-views button{border:none;background:transparent;color:var(--muted);border-radius:6px;padding:3px 12px;font-size:11px;cursor:pointer}
+  .dg-views button.active{background:rgba(77,141,255,.18);color:var(--softblue);font-weight:700}
+  html[data-theme="light"] .dg-views button.active{background:rgba(47,111,224,.12);color:#2f6fe0}
+  /* 擒龙 AI 悬浮入口：固定在视口右下角，不占详情布局 */
+  #aiFab{position:fixed;right:26px;bottom:28px;width:50px;height:50px;border-radius:50%;
+    border:1px solid rgba(138,182,255,.55);cursor:pointer;z-index:80;padding:0;
+    background:linear-gradient(135deg,#2b5cff,#4d8dff);color:#fff;
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 6px 22px rgba(20,50,120,.35);transition:transform .15s,filter .15s}
+  #aiFab:hover{transform:translateY(-2px);filter:brightness(1.12)}
+  #aiFab svg{width:25px;height:25px}
+  #aiFab .ai-fab-dot{position:absolute;top:5px;right:5px;width:8px;height:8px;border-radius:50%;
+    background:#ffd166;border:2px solid #fff}
+  .ai-float-panel{position:fixed;right:26px;bottom:90px;width:min(460px,calc(100vw - 40px));
+    max-height:min(76vh,720px);display:none;flex-direction:column;z-index:81;
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    box-shadow:0 18px 50px rgba(0,0,0,.4);overflow:hidden}
+  .ai-float-panel.open{display:flex}
+  /* 全屏：与图表全屏一致，页面内铺满，不依赖浏览器全屏权限 */
+  .ai-float-panel.fullscreen{inset:16px;right:16px;bottom:16px;width:auto;max-height:none;border-radius:12px;z-index:150}
+  .ai-float-head{display:flex;align-items:center;gap:8px;padding:11px 13px;border-bottom:1px solid var(--line);
+    background:var(--panel2);flex:none}
+  .ai-float-title{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--soft)}
+  .ai-float-title svg{width:16px;height:16px;color:var(--softblue)}
+  .ai-float-head .hint{margin-left:auto;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ai-float-head button{border:none;background:transparent;color:var(--muted);font-size:20px;line-height:1;
+    cursor:pointer;padding:0 3px}
+  .ai-float-head button:hover{color:var(--soft)}
+  #aiFloatFull{font-size:16px}
+  .ai-float-body{overflow-y:auto;padding:12px 13px;min-height:0;flex:1 1 auto}
+  .ai-float-body .ai-msgs{max-height:260px}
+  .ai-float-body .icard.ai-card{margin-top:0}
+  /* 全屏时放开消息区限高，结论和对话都能铺开看 */
+  .ai-float-panel.fullscreen .ai-float-body{padding:18px 22px}
+  .ai-float-panel.fullscreen .ai-msgs{max-height:none}
+  .ai-float-panel.fullscreen .icard.ai-card{max-width:960px;width:100%;margin:0 auto 14px}
+  html[data-theme="light"] .ai-float-panel{box-shadow:0 18px 50px rgba(60,50,30,.2)}
+  /* 擒龙 · 交接摘要 + 接力矩阵 */
+  .dg-summary{font-size:12px;line-height:1.7;padding:8px 11px;margin:8px 0;border-radius:8px;
+    background:var(--panel2);border:1px solid var(--line);color:var(--soft)}
+  .dg-summary-tag{display:inline-block;padding:0 6px;margin-right:5px;border-radius:5px;font-size:10px;
+    background:rgba(201,144,46,.2);color:#f5c876;font-weight:700}
+  html[data-theme="light"] .dg-summary-tag{color:#8a5d10}
+  .dg-mx-scroll{overflow:auto;max-height:440px;border:1px solid var(--line);border-radius:8px}
+  .dg-mx{border-collapse:collapse;width:100%;font-size:11px}
+  .dg-mx th,.dg-mx td{border-bottom:1px solid var(--line);border-right:1px solid var(--line);
+    padding:5px 6px;text-align:center;white-space:nowrap}
+  .dg-mx th{position:sticky;top:0;background:var(--panel2);color:var(--muted);font-weight:600;z-index:2}
+  .dg-mx .dg-mx-name{position:sticky;left:0;background:var(--panel);text-align:left;font-weight:600;z-index:1;min-width:90px}
+  .dg-mx th.dg-mx-name{z-index:3}
+  .dg-mx-days{display:block;font-size:9px;opacity:.65;font-weight:400}
+  .dg-mx-cell{cursor:pointer;font-weight:600}
+  .dg-mx-cell b{display:block;font-size:10px;font-weight:400;opacity:.85}
+  .dg-mx-cell:hover{filter:brightness(1.2)}
+  /* 矩阵里点过的格子留选中框，右栏详情对应哪一天一眼可见 */
+  .dg-mx-cell.sel{outline:2px solid var(--softblue);outline-offset:-2px}
+  .dg-mx-conf{background:rgba(231,76,60,.18);color:#ff8b80}
+  .dg-mx-reb{background:rgba(201,144,46,.2);color:#f5c876}
+  .dg-mx-pend{background:rgba(139,124,246,.2);color:#c0b0ff}
+  .dg-mx-ret{background:rgba(127,136,160,.12);color:var(--muted)}
+  .dg-mx-none{color:var(--line)}
+  .dg-mx-legend{display:inline-block;padding:1px 7px;border-radius:5px;font-size:10px;margin-right:3px}
+  html[data-theme="light"] .dg-mx-conf{color:#c0392b;background:rgba(192,57,43,.12)}
+  html[data-theme="light"] .dg-mx-reb{color:#8a5d10}
+  html[data-theme="light"] .dg-mx-pend{color:#5b3fc4;background:rgba(109,77,214,.12)}
   .dg-row{cursor:pointer}
   .dg-row:hover td{background:rgba(77,141,255,.09)}
   .dg-row.sel td{background:rgba(77,141,255,.16)}
@@ -689,6 +783,8 @@
   .dg-badge.broken{color:#f5c876;border-color:rgba(245,166,35,.5);background:rgba(245,166,35,.1)}
   .dg-badge.weak{color:#2ecc71;border-color:rgba(46,204,113,.45);background:rgba(46,204,113,.1)}
   .dg-badge.pending{color:var(--muted);border-color:var(--line);background:var(--panel2)}
+  /* 档位徽章「晋级未确认」用 pend，避开盘中状态 pending（未表态）的灰 */
+  .dg-badge.pend{color:#c0b0ff;border-color:rgba(139,124,246,.55);background:rgba(139,124,246,.14)}
   .dg-score{font-size:24px;font-weight:600;color:var(--soft)}
   .dg-score small{font-size:12px;color:var(--muted);font-weight:400}
   .dg-bar-row{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:11px}
@@ -697,7 +793,39 @@
   /* span 默认 inline，width/height 不生效——必须 block 才能按分数画出填充条 */
   .dg-bar-fill{display:block;height:100%;border-radius:5px;background:var(--accent);
     transition:width .35s ease}
-  .dg-bar-row .dg-bv{width:34px;text-align:right;color:var(--soft);flex:none}
+  .dg-bar-row .dg-bv{width:46px;text-align:right;color:var(--soft);flex:none;white-space:nowrap}
+  /* 满分标出来才有参照：裸数字 13 看不出是「13/25 中」还是「13/13 满」 */
+  .dg-bar-row .dg-bv small{font-size:10px;color:var(--muted);font-weight:400}
+  .dg-bar-row .dg-blevel{width:30px;flex:none;text-align:right;font-size:10px}
+  /* 档位词走 class 而不是内联色：浅色主题下橙/灰在浅底上对比不够，得分别加深 */
+  .dg-blevel.lv-a{color:#e0392b}
+  .dg-blevel.lv-b{color:#ff6b1a}
+  .dg-blevel.lv-c{color:#3d7dfa}
+  .dg-blevel.lv-d{color:#9aa4b6}
+  html[data-theme="light"] .dg-blevel.lv-a{color:#c0392b}
+  html[data-theme="light"] .dg-blevel.lv-b{color:#b45309}
+  html[data-theme="light"] .dg-blevel.lv-c{color:#2f6fe0}
+  html[data-theme="light"] .dg-blevel.lv-d{color:#647084}
+  .dg-thresh{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);
+    padding:5px 0 7px;margin-bottom:4px;border-bottom:1px dashed var(--line)}
+  .dg-thresh b{color:var(--soft);font-weight:600}
+  /* 计分规则区：摆在柱子上面，可收起；柱子本身 cursor:help 提示可以悬停看公式 */
+  .dg-rules{margin:2px 0 8px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;
+    background:var(--panel2)}
+  .dg-rules-hd{display:flex;align-items:center;gap:7px;font-size:10.5px;color:var(--muted)}
+  .dg-rules-hd b{color:var(--soft);font-weight:600;font-size:11px}
+  .dg-rules-hd .dg-rules-tip{color:var(--softblue)}
+  .dg-rules-tg{margin-left:auto;flex:none;font:inherit;font-size:10px;padding:1px 7px;border-radius:999px;
+    border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer}
+  .dg-rules-tg:hover{color:var(--text);border-color:var(--soft)}
+  .dg-rules-bd{margin-top:5px;display:flex;flex-direction:column;gap:3px}
+  .dg-rules.folded .dg-rules-bd{display:none}
+  .dg-rule-row{display:flex;gap:7px;font-size:10.5px;line-height:1.6;color:var(--muted)}
+  .dg-rule-row b{flex:none;width:26px;color:var(--soft);font-weight:600}
+  .dg-rule-row span{flex:1 1 auto;min-width:0}
+  html[data-theme="light"] .dg-rule-row{color:#6b7280}
+  html[data-theme="light"] .dg-rule-row b{color:#26221e}
+  .dg-bar-row{cursor:help}
   .dg-reason{font-size:11px;color:var(--metric);line-height:1.7;padding-left:14px;position:relative}
   .dg-reason::before{content:"·";position:absolute;left:3px;color:var(--accent);font-weight:600}
   .dg-itrack{display:flex;gap:6px;flex-wrap:wrap;font-size:11px}
@@ -718,6 +846,130 @@
   .dg-peer.dg-peer-self.sel{color:#3a2b0e;background:#f5c876;border-color:#c9902e;font-weight:700;box-shadow:0 1px 5px rgba(201,144,46,.35)}
   html[data-theme="light"] .dg-peer.dg-peer-self{color:#9c6a12;border-color:rgba(156,106,18,.5)}
   html[data-theme="light"] .dg-peer.dg-peer-self.sel{color:#3a2b0e;background:#f5c876;border-color:#c9902e}
+  /* 擒龙左栏 · 作战小徽章：一眼分清 可打 / 等 / 不碰 */
+  .dg-act{display:inline-block;font-size:9px;line-height:1.5;padding:1px 5px;margin-left:4px;
+    border-radius:4px;white-space:nowrap;vertical-align:1px;
+    border:1px solid var(--line);color:var(--muted);background:var(--panel2)}
+  .dg-act.buy{color:var(--softblue);border-color:rgba(77,141,255,.5);background:rgba(77,141,255,.12)}
+  .dg-act.warn{color:#f5a623;border-color:rgba(245,166,35,.5);background:rgba(245,166,35,.12)}
+  .dg-act.avoid{color:var(--up);border-color:rgba(231,76,60,.45);background:rgba(231,76,60,.1)}
+  .dg-act.pend{color:#c0b0ff;border-color:rgba(139,124,246,.5);background:rgba(139,124,246,.12)}
+  html[data-theme="light"] .dg-act.buy{color:#2f6fe0;border-color:rgba(47,111,224,.45);background:rgba(47,111,224,.08)}
+  html[data-theme="light"] .dg-act.warn{color:#9c6a12;border-color:rgba(156,106,18,.4);background:rgba(245,200,118,.16)}
+  html[data-theme="light"] .dg-act.avoid{color:#c0392b;border-color:rgba(192,57,43,.35);background:rgba(192,57,43,.07)}
+  html[data-theme="light"] .dg-act.pend{color:#5b3fc4;border-color:rgba(109,77,214,.4);background:rgba(109,77,214,.09)}
+  /* ===== 擒龙 · 交易监管异动（交易所异常波动条款） ===== */
+  /* 列表小标：只在踩到/接近异动线时出现，正常股不挂标，避免整屏噪音 */
+  .dg-reg-tag{display:inline-block;font-size:9px;line-height:1.5;padding:1px 5px;margin-left:4px;
+    border-radius:4px;white-space:nowrap;vertical-align:1px;font-weight:600;
+    border:1px solid var(--line);color:var(--muted);background:var(--panel2)}
+  .dg-reg-tag.severe{color:#fff;background:#c0392b;border-color:#a93226}
+  .dg-reg-tag.warn{color:#ffd0c8;background:rgba(224,60,40,.3);border-color:rgba(224,60,40,.72)}
+  .dg-reg-tag.alert{color:#ffc46b;background:rgba(245,166,35,.16);border-color:rgba(245,166,35,.5)}
+  .dg-reg-tag.near{color:#9ec4ff;background:rgba(77,141,255,.14);border-color:rgba(77,141,255,.45)}
+  html[data-theme="light"] .dg-reg-tag.severe{color:#fff;background:#c0392b;border-color:#a93226}
+  html[data-theme="light"] .dg-reg-tag.warn{color:#a3200f;background:rgba(224,60,40,.13);border-color:rgba(192,57,43,.5)}
+  html[data-theme="light"] .dg-reg-tag.alert{color:#9c6a12;background:rgba(245,166,35,.16);border-color:rgba(156,106,18,.45)}
+  html[data-theme="light"] .dg-reg-tag.near{color:#2f6fe0;background:rgba(47,111,224,.1);border-color:rgba(47,111,224,.4)}
+  /* 顶部汇总：一眼看这一池子有多少只被监管额度卡住 */
+  .dg-reg-sum{font-size:11px;color:var(--muted);padding:1px 8px;border-radius:10px;
+    border:1px dashed var(--line);background:var(--panel2)}
+  .dg-reg-sum b{font-weight:700}
+  .dg-reg-sum b.lv-severe{color:#ff6b5e}
+  .dg-reg-sum b.lv-warn{color:#f5a623}
+  .dg-reg-sum b.lv-near{color:#7ab0ff}
+  html[data-theme="light"] .dg-reg-sum b.lv-severe{color:#c0392b}
+  html[data-theme="light"] .dg-reg-sum b.lv-warn{color:#9c6a12}
+  html[data-theme="light"] .dg-reg-sum b.lv-near{color:#2f6fe0}
+  /* 详情卡：两行额度条 + 结论句 */
+  .dg-reg-card{border:1px solid var(--line);border-left:3px solid var(--line);border-radius:8px;
+    padding:8px 10px;background:var(--panel2);display:grid;gap:6px}
+  .dg-reg-card.lv-severe{border-left-color:#c0392b}
+  .dg-reg-card.lv-warn{border-left-color:#e08a2e}
+  .dg-reg-card.lv-alert{border-left-color:#f5a623}
+  .dg-reg-card.lv-near{border-left-color:#4d8dff}
+  .dg-reg-hd{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+  .dg-reg-title{font-size:10px;font-weight:700;color:var(--soft);letter-spacing:.5px;
+    padding-right:7px;border-right:1px solid var(--line)}
+  .dg-reg-badge{font-size:10px;font-weight:700;padding:1px 7px;border-radius:5px;
+    border:1px solid var(--line);color:var(--muted);background:var(--panel)}
+  .dg-reg-badge.severe{color:#fff;background:#c0392b;border-color:#a93226}
+  .dg-reg-badge.warn{color:#ffd0c8;background:rgba(224,60,40,.34);border-color:rgba(224,60,40,.75)}
+  .dg-reg-badge.alert{color:#ffc46b;background:rgba(245,166,35,.16);border-color:rgba(245,166,35,.5)}
+  .dg-reg-badge.near{color:#9ec4ff;background:rgba(77,141,255,.14);border-color:rgba(77,141,255,.45)}
+  html[data-theme="light"] .dg-reg-badge.severe{color:#fff;background:#c0392b}
+  html[data-theme="light"] .dg-reg-badge.warn{color:#a3200f;background:rgba(224,60,40,.13);border-color:rgba(192,57,43,.5)}
+  html[data-theme="light"] .dg-reg-badge.alert{color:#9c6a12;background:rgba(245,166,35,.16)}
+  html[data-theme="light"] .dg-reg-badge.near{color:#2f6fe0;background:rgba(47,111,224,.1)}
+  .dg-reg-cnt{margin-left:auto;font-size:10px;color:var(--muted);display:flex;align-items:center;gap:3px}
+  .dg-reg-cnt b{color:var(--soft);margin-left:3px}
+  .dg-reg-dot{width:7px;height:7px;border-radius:50%;background:var(--line);display:inline-block}
+  .dg-reg-dot.on{background:#f5a623}
+  html[data-theme="light"] .dg-reg-dot.on{background:#c9902e}
+  .dg-reg-bars{display:grid;grid-template-columns:1fr;gap:5px}
+  .dg-reg-bar{display:flex;align-items:center;gap:6px;font-size:10px}
+  .dg-reg-bl{color:var(--muted);white-space:nowrap;min-width:62px}
+  .dg-reg-track{flex:1;height:5px;border-radius:3px;background:var(--line);overflow:hidden}
+  .dg-reg-fill{display:block;height:100%;border-radius:3px;background:#4d8dff}
+  .dg-reg-fill.near{background:#f5a623}
+  .dg-reg-fill.hit{background:#e0392b}
+  .dg-reg-bv{color:var(--soft);white-space:nowrap;font-variant-numeric:tabular-nums}
+  .dg-reg-bv small{color:var(--muted);font-size:9px}
+  .dg-reg-room{font-size:10px;color:var(--muted)}
+  .dg-reg-room b{color:var(--soft)}
+  .dg-reg-why{font-size:10.5px;line-height:1.5}
+  /* ===== 擒龙 · 作战计划卡 ===== */
+  /* 四支柱页顶部的一行提示：只答「现在该盯什么」，细节留给作战计划 */
+  .dg-brief{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;overflow:hidden;padding:7px 11px;margin:10px 0 0;
+    border:1px solid var(--line);border-radius:9px;background:var(--panel2);font-size:12px;line-height:1.5}
+  .dg-brief .k{flex:none;font-size:10px;color:var(--muted)}
+  .dg-brief b{flex:none;color:var(--soft);font-variant-numeric:tabular-nums}
+  .dg-brief .t{flex:1 1 auto;min-width:0;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dg-brief .go{flex:none;font-size:11px;color:var(--softblue);background:none;border:none;padding:0;cursor:pointer}
+  .dg-brief .go:hover{text-decoration:underline}
+  .dg-brief.warn{border-color:rgba(245,200,118,.45);background:rgba(245,200,118,.07)}
+  .dg-brief.warn b{color:#f5c876}
+  html[data-theme="light"] .dg-brief.warn b{color:#9c6a12}
+  .dg-plan{display:flex;flex-direction:column;gap:8px;font-size:12px}
+  .dg-plan-hero{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:8px 11px;border:1px solid var(--line);border-radius:9px;background:var(--panel2)}
+  .dg-plan-role{font-size:13px;font-weight:700;color:var(--softblue)}
+  .dg-plan-role.rebound{color:#f5c876}
+  .dg-plan-role.retired,.dg-plan-role.ice{color:var(--muted)}
+  .dg-plan-role.pending{color:#c0b0ff}
+  html[data-theme="light"] .dg-plan-role.pending{color:#5b3fc4}
+  .dg-plan-pos{margin-left:auto;font-size:11px;color:var(--muted)}
+  .dg-plan-pos b{font-size:15px;color:var(--soft);font-variant-numeric:tabular-nums}
+  .dg-plan-pos b.on{color:var(--up)}
+  .dg-plan-pos b.off{color:var(--muted)}
+  .dg-plan-sec{border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  .dg-plan-sec>h5{margin:0;padding:6px 11px;font-size:12px;font-weight:600;color:var(--soft);background:var(--panel2);border-bottom:1px solid var(--line)}
+  .dg-plan-sec>h5 span{font-size:10px;font-weight:400;color:var(--muted);margin-left:6px}
+  .dg-plan-row{display:flex;gap:9px;align-items:flex-start;padding:6px 11px;border-top:1px dashed var(--dashline)}
+  .dg-plan-row:first-of-type{border-top:none}
+  .dg-plan-tag{flex:none;min-width:62px;font-size:10px;padding:2px 6px;border-radius:5px;text-align:center;
+    border:1px solid var(--line);color:var(--muted);background:var(--panel2)}
+  .dg-plan-row.hit .dg-plan-tag{border-color:rgba(77,141,255,.6);color:var(--softblue);background:rgba(77,141,255,.14)}
+  .dg-plan-row.hit.sell .dg-plan-tag{border-color:rgba(231,76,60,.6);color:var(--up);background:rgba(231,76,60,.12)}
+  .dg-plan-desc{flex:1 1 auto;line-height:1.55;color:var(--muted)}
+  .dg-plan-desc b{color:var(--soft);font-weight:600}
+  .dg-plan-row.hit .dg-plan-desc b{color:var(--softblue)}
+  .dg-plan-row.hit.sell .dg-plan-desc b{color:var(--up)}
+  .dg-plan-anchors{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;padding:8px 11px}
+  .dg-plan-anchor{background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:6px 8px;text-align:center}
+  .dg-plan-anchor .k{font-size:10px;color:var(--muted)}
+  .dg-plan-anchor .v{font-size:14px;font-weight:700;color:var(--soft);font-variant-numeric:tabular-nums;margin-top:2px}
+  .dg-plan-anchor.buy .v{color:var(--accent)}
+  .dg-plan-anchor.stop .v{color:var(--down)}
+  .dg-plan-foot{font-size:10px;color:var(--muted);line-height:1.6;padding:0 2px}
+  /* 关键时点：异动用琥珀色，刻意不跟涨红跌绿混色 */
+  .dg-plan-row.warn .dg-plan-tag{border-color:rgba(245,200,118,.55);color:#f5c876;background:rgba(245,200,118,.12)}
+  .dg-plan-bad{font-style:normal;color:var(--soft)}
+  .dg-plan-act{color:var(--soft)}
+  .dg-plan-row.hit.warn .dg-plan-bad{color:#f5c876;font-weight:600}
+  .dg-plan-seen{font-size:10px;color:var(--muted);margin-left:4px;white-space:nowrap}
+  .dg-plan-seen.bad{color:#f5c876}
+  html[data-theme="light"] .dg-plan-bad,html[data-theme="light"] .dg-plan-seen.bad{color:#9c6a12}
+  html[data-theme="light"] .dg-plan-row.warn .dg-plan-tag{color:#9c6a12;border-color:rgba(156,106,18,.4);background:rgba(245,200,118,.16)}
   .chart{width:100%;height:360px;min-width:0;max-width:100%}
   /* ===== K 线全屏 ===== */
   .chartwrap{position:relative;min-width:0;max-width:100%}
@@ -938,9 +1190,7 @@
   .kv span:first-child{color:var(--muted)}
   .kv b{font-weight:600}
   /* ---- AI 解读：顶部吸顶结论条 + 展开卡 ---- */
-  #mvAI{position:sticky;top:56px;z-index:20}
-  #mvAI.expanded{position:static}
-  #hdAI{margin-top:10px}
+  /* 异动/持仓/擒龙的 AI 解读统一走右下角全局悬浮窗，模块内不再内嵌 */
   /* ---- 持仓盈亏汇总（今日 / 累计 / 每日历史）---- */
   .pnl-bar{margin:2px 0 12px}
   .pnl-cards{display:grid;grid-template-columns:1fr 1fr 1fr 2.1fr;gap:10px;align-items:stretch}
@@ -1201,6 +1451,18 @@
   .ai-input button{padding:8px 16px;font-size:12px;border-radius:8px;border:1px solid rgba(77,141,255,.35);
     background:rgba(77,141,255,.14);color:var(--softblue);cursor:pointer;white-space:nowrap}
   .ai-input button:disabled{opacity:.45;cursor:not-allowed}
+  /* AI markdown 渲染：结论卡与对话气泡共用 */
+  .ai-md .ai-md-p{margin:0 0 5px}
+  .ai-md .ai-md-h{margin:9px 0 4px;font-weight:700;color:var(--soft);font-size:12px}
+  .ai-md .ai-md-h:first-child{margin-top:0}
+  .ai-md-list{margin:3px 0 8px}
+  .ai-md-li{position:relative;padding-left:14px;margin:3px 0;line-height:1.7}
+  .ai-md-li::before{content:"·";position:absolute;left:3px;top:0;color:var(--softblue);font-weight:700}
+  .ai-md code{background:rgba(127,136,160,.16);border-radius:4px;padding:0 4px;font-size:11px}
+  .ai-evtag{font-size:10px;opacity:.8;color:var(--softblue);white-space:nowrap}
+  .ai-know,.ai-infer{font-size:10px;padding:0 5px;border-radius:4px;
+    background:rgba(77,141,255,.14);color:var(--softblue);white-space:nowrap}
+  html[data-theme="light"] .ai-md .ai-md-h{color:#1f2d3d}
   .fin-table{width:100%;border-collapse:collapse;font-size:11px}  .fin-table th,.fin-table td{padding:3px 4px;text-align:right;border-bottom:1px solid var(--tdline)}
   .fin-table th{color:var(--muted);font-weight:400}
   .fin-table td:first-child,.fin-table th:first-child{text-align:left}
@@ -1576,9 +1838,8 @@
         </div>
         <div class="panel">
           <h3 id="mvChartTitle">异动个股详情</h3>
-          <div id="mvEmpty" class="empty">点击左侧异动股查看：图形 / 基本信息 / 基本面 / 券商研报 / 行业与阶段</div>
+          <div id="mvEmpty" class="empty">点击左侧异动股查看：图形 / 基本信息 / 基本面 / 券商研报 / 行业与阶段。想看 AI 为什么异动，点右下角悬浮按钮。</div>
           <div id="mvDetail" style="display:none">
-            <div id="mvAI" style="margin-bottom:10px"></div>
             <div id="mvChart" class="chart" style="height:340px"></div>
             <div class="legend" id="mvLegend"></div>
             <div id="mvInfo" style="display:grid;gap:10px;margin-top:10px"></div>
@@ -1593,45 +1854,69 @@
         <div class="panel">
           <h3>擒龙 · 双闸门 <span class="hint">闸门一宽进（涨停/触板/首板全收）· 闸门二次日四支柱确认 · 冰点只观察不提示 · 盘中走腾讯快照零东财请求</span></h3>
           <div class="chips" id="dgMeta"></div>
-          <div class="chips" id="dgLanes">
-            <button data-dglane="confirmed" class="active" data-tip="闸门二次日验证通过：晋级 + 四支柱得分≥68，且非情绪冰点。次日高开承接、封板牢固的强势标的。">确认龙 <span id="dgCntConfirmed" class="pill">0</span></button>
-            <button data-dglane="retired" data-tip="昨日潜龙次日未能晋级（未封板 / 炸板 / 走弱）或得分不足。保留在池里观察反包二波机会，不作为提示重点。">退位龙 <span id="dgCntRetired" class="pill">0</span></button>
-            <button data-dglane="observing" data-tip="闸门一宽进收录的潜龙候选（当日涨停 / 触板 / 首板 / 炸板），尚未经过次日验证；或当前处于情绪冰点，一律只观察不提示。">只观察 <span id="dgCntObserve" class="pill">0</span></button>
+          <div class="dg-dates" id="dgDates"></div>
+          <div class="dg-views" id="dgLeftViews">
+            <button data-dgview="list" class="active" data-tip="按档位查看当日潜龙 / 确认龙 / 退位龙，点行在右侧看四支柱与 K 线">龙头列表</button>
+            <button data-dgview="matrix" data-tip="跨日接力矩阵：行是个股、列是池子日，看龙头如何续任 / 反包 / 退位，点格子在右侧看当日详情">接力矩阵</button>
           </div>
-          <div class="table-wrap">
-            <table>
-              <thead><tr>
-                <th>代码</th><th>名称</th><th class="num">得分</th>
-                <th class="num">连板</th><th class="num">炸板</th>
-                <th>行业/题材</th><th>阶段</th><th class="num">现价</th><th class="num">涨幅</th>
-                <th>盘中</th>
-              </tr></thead>
-              <tbody id="dgTable"></tbody>
-            </table>
+          <div id="dgViewList">
+            <div class="chips" id="dgLanes">
+              <button data-dglane="confirmed" class="active" data-tip="闸门二次日验证通过：晋级 + 四支柱得分≥68，且非情绪冰点。次日高开承接、封板牢固的强势标的。">确认龙 <span id="dgCntConfirmed" class="pill">0</span></button>
+              <button data-dglane="pending" data-tip="晋级了（次日继续涨停/连板抬高）但四支柱没到 68 分。还在板上，只是封板质量/题材带动/资金承接不够硬——不算确认龙，也不算退位，单独一档盯回封与次日再验。">晋级未确认 <span id="dgCntPending" class="pill">0</span></button>
+              <button data-dglane="retired" data-tip="昨日潜龙次日未能晋级（未封板 / 炸板 / 走弱）——真的掉队了。保留在池里观察反包二波机会，不作为提示重点。">退位龙 <span id="dgCntRetired" class="pill">0</span></button>
+              <button data-dglane="observing" data-tip="闸门一宽进收录的潜龙候选（当日涨停 / 触板 / 首板 / 炸板），尚未经过次日验证；或当前处于情绪冰点，一律只观察不提示。"><span id="dgLaneObsLabel">只观察</span> <span id="dgCntObserve" class="pill">0</span></button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr>
+                  <th>代码</th><th>名称</th><th class="num">得分</th>
+                  <th class="num">连板</th><th class="num">炸板</th>
+                  <th>行业/题材</th><th>阶段</th><th class="num">现价</th><th class="num">涨幅</th>
+                  <th>盘中</th>
+                </tr></thead>
+                <tbody id="dgTable"></tbody>
+              </table>
+            </div>
+            <div id="dgEmpty" class="empty">还没有擒龙数据。EOD 后 15:45 会自动建池，你也可以点右侧「重建」手动跑一次。</div>
           </div>
-          <div id="dgEmpty" class="empty">还没有擒龙数据。EOD 后 15:45 会自动建池，你也可以点右侧「重建」手动跑一次。</div>
+          <div id="dgViewMatrix" style="display:none">
+            <div id="dgMatrixSummary" class="dg-summary"></div>
+            <div id="dgMatrix" class="dg-matrix-wrap"></div>
+          </div>
         </div>
         <div class="panel">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
             <h3 id="dgDetailTitle" style="margin:0">标的详情 · 四支柱打分</h3>
             <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
-              <button class="mini-btn" id="dgFullInfo" title="在「异动」页打开该股完整详情（基本面 / 研报 / AI 解读）">个股详情</button>
+              <button class="mini-btn" id="dgFullInfo" title="弹窗查看完整档案（基本信息 / 财务 / 研报 / 深度研究档案）；AI 解读与追问在右下角悬浮按钮">完整档案</button>
               <button class="mini-btn" id="dgRunDaily" title="盘后建池+验证（含东财涨停池单次请求）">重建盘后</button>
               <button class="mini-btn" id="dgRefresh" title="手动跑一次盘中腾讯快照验证（零东财请求）">刷新盘中</button>
             </div>
           </div>
-          <div id="dgEmptyDetail" class="empty">点击左侧任一行，查看高度/强度/带动/资金四项得分、晋级理由、盘中三时点轨迹与风险提示。</div>
-          <div id="dgDetail" style="display:none">
-            <div id="dgScore" style="margin:10px 0"></div>
-            <div id="dgBars" style="margin:10px 0"></div>
-            <div id="dgReasons" style="margin:10px 0"></div>
-            <div id="dgPeers" style="margin:10px 0"></div>
-            <div id="dgIntraday" style="margin:10px 0"></div>
-            <div id="dgChart" class="chart" style="height:300px"></div>
-            <div class="legend" id="dgLegend"></div>
+          <div id="dgViewDetail">
+            <div id="dgEmptyDetail" class="empty">点击左侧任一行，查看四支柱得分、晋级理由、盘中轨迹与 K 线；切到「接力矩阵」点格子可看该股当日详情。想了解为什么涨停，点右下角悬浮按钮与 AI 对话。</div>
+            <div id="dgDetail" style="display:none">
+              <div class="dg-views" id="dgDetailTabs" style="margin:8px 0 10px">
+                <button data-dgtab="analyze" class="active" data-tip="四支柱得分、晋级理由、同题材、盘中轨迹">四支柱</button>
+                <button data-dgtab="plan" data-tip="买点条件、卖出铁律、建议仓位与价格锚，直接对应盘中状态">作战计划</button>
+              </div>
+              <div id="dgPaneAnalyze">
+                <div id="dgWatchBrief"></div>
+                <div id="dgScore" style="margin:10px 0"></div>
+                <div id="dgReg" style="margin:10px 0"></div>
+                <div id="dgBars" style="margin:10px 0"></div>
+                <div id="dgReasons" style="margin:10px 0"></div>
+                <div id="dgPeers" style="margin:10px 0"></div>
+                <div id="dgIntraday" style="margin:10px 0"></div>
+              </div>
+              <div id="dgPanePlan" style="display:none"></div>
+              <div id="dgChart" class="chart" style="height:300px"></div>
+              <div class="legend" id="dgLegend"></div>
+            </div>
           </div>
         </div>
       </div>
+
     </section>
 
     <!-- ================= 持仓 ================= -->
@@ -1734,7 +2019,6 @@
         </div>
         <div class="info-grid" id="hdInfo"></div>
         <div id="hdResearch"></div>
-        <div id="hdAI"></div>
       </div>
     </section>
 
@@ -1770,6 +2054,24 @@
       </div>
     </section>
   </main>
+
+  <!-- 全局 AI 悬浮入口：异动 / 持仓 / 擒龙 等模块共用，不占任何详情布局，点图标才取数 -->
+  <button id="aiFab" type="button" title="打开 AI 解读与对话" aria-label="打开 AI 解读与对话">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 2.6l1.9 5.3 5.3 1.9-5.3 1.9-1.9 5.3-1.9-5.3L4.8 9.8l5.3-1.9L12 2.6z"/>
+      <path d="M18.5 15l.85 2.15L21.5 18l-2.15.85L18.5 21l-.85-2.15L15.5 18l2.15-.85L18.5 15z"/>
+    </svg>
+    <span class="ai-fab-dot"></span>
+  </button>
+  <div id="aiFloatPanel" class="ai-float-panel">
+    <div class="ai-float-head">
+      <span class="ai-float-title"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l1.9 5.3 5.3 1.9-5.3 1.9-1.9 5.3-1.9-5.3L4.8 9.8l5.3-1.9L12 2.6z"/></svg>AI 解读 · 对话</span>
+      <span id="aiFloatScope" class="hint"></span>
+      <button id="aiFloatFull" type="button" title="全屏查看" aria-label="全屏查看">⤢</button>
+      <button id="aiFloatClose" type="button" title="收起">×</button>
+    </div>
+    <div id="aiFloatHost" class="ai-float-body"></div>
+  </div>
 
   <!-- 通用对话框：加入持仓 / 编辑成本 / 删除确认 -->
   <div class="modal-mask" id="modal">
@@ -3798,13 +4100,25 @@
   // ================= 关注 =================
   function renderAlerts() {
     if (!S.alerts.length) { $('#alertBox').innerHTML = ''; return; }
-    const rows = S.alerts.slice(0, 6);
+    // 同一只票在窗口内会因关键点上移/下移多次触发，后端 alerts 是「事件流」，
+    // 一只票能占好几条。卡片回答的是「现在该盯哪几只」，直接 slice(0,6) 会让
+    // 重复的票把别的票挤掉（截图里华东重机就出现了两次）。这里按代码归并、
+    // 取最新一条，被合并的次数用 ×N 角标标出，事件信息不丢。
+    const byCode = new Map();
+    for (const a of S.alerts) {
+      const g = byCode.get(a.code);
+      if (g) g.push(a); else byCode.set(a.code, [a]);
+    }
+    const rows = [...byCode.values()]
+      .map(list => Object.assign({}, list[0], { hits: list.length }))
+      .sort((x, y) => String(y.date).localeCompare(String(x.date)))
+      .slice(0, 6);
     $('#alertBox').innerHTML = `<div class="panel" style="margin-bottom:12px">
-      <h3>提醒 · 自选与持仓 <span class="hint">最近 8 个交易日内触发的买卖点（站内）</span></h3>
+      <h3>提醒 · 自选与持仓 <span class="hint">最近 8 个交易日内触发的买卖点（站内）· 同一只票多次触发只列最新一次</span></h3>
       <div class="alerts">
         ${rows.map(a => `
           <div class="alert ${a.type === 'sell' ? 'sell' : ''}" data-code="${a.code}">
-            <div class="at"><span>${a.name} <span style="color:var(--muted);font-weight:400">${a.code}</span></span>
+            <div class="at"><span>${a.name} <span style="color:var(--muted);font-weight:400">${a.code}</span>${a.hits > 1 ? `<span class="sigcnt" title="窗口内共触发 ${a.hits} 次，卡片显示最新一次（${a.date}）">×${a.hits}</span>` : ''}</span>
               ${a.type === 'buy' ? '<span class="tag-buy">买点</span>' : '<span class="tag-sell">卖点</span>'}</div>
             <div class="ad">${a.date} · 关键点 ${fmt(a.pivot)} · 触发价 ${fmt(a.price)} · 量比 ${fmt(a.vol_ratio)}<br/>
               ${a.type === 'buy' ? `质量分 ${a.quality}（${a.grade}档）· 止损 ${fmt(a.stop)}` : '放量跌破 60 日最低收盘'} · ${a.scope === 'holding' ? '持仓' : '自选'}</div>
@@ -3981,9 +4295,13 @@
     const m = S.focusMeta || {};
     if (!m.picked) return '关注信号 <span class="hint">全市场关注池尚未生成（回退历史信号池）· 点表头排序</span>';
     const day = m.signals_as_of || m.date || '—';
+    // 池子自己几点生成的：右上角「快照生成」是市场快照时间（①② 跑完的时刻），
+    // 和关注池（⑦）不是同一件事，盘中看起来会像「没更新」。这里单独标出来。
+    const upd = (m.generated_at || '').replace('T', ' ').slice(11, 16);
     return '全市场关注池 <span class="hint">扫描 ' + m.universe + ' 只 · 入选 ' + m.picked
       + ' 只（买点 ' + m.buy + ' / 卖点 ' + m.sell + '）· 近 ' + m.window_days
       + ' 个交易日自 ' + m.window_from + ' · 信号截至 ' + day
+      + (upd ? ' · 池子更新 ' + upd : '')
       + ' · 买点 S1/S2 + A/B 档按质量分 · 点表头排序 · 悬停列头看口径与公式</span>';
   }
 
@@ -4227,6 +4545,9 @@
       <span class="hint">${m.sig ? `最近信号 ${m.sig === 'buy' ? '买点' : '卖点'} ${m.sig_date} · 关键点 ${fmt(m.pivot)}${m.stop ? ' · 止损 ' + fmt(m.stop) : ''}` : '近期无买卖点触发'} · 所属 ${S.sectorMembers.name}</span>
       ${badge(m.stage, m.sub, m.sub_confirmed)}`;
     renderFocusInfo(m.code, { name: m.name, sector: S.sectorMembers ? S.sectorMembers.name : null, stage: m.stage, sub: m.sub });
+    // 关注页（板块成分股视图）也要同步 AI 上下文：右侧显示谁，悬浮 AI 就解读谁
+    setAiContext({ code: m.code, name: m.name, sector: S.sectorMembers ? S.sectorMembers.name : null,
+                   stage: m.stage, sub: m.sub }, 'stock');
     const d = withLiveBar(await chartOf(m.code), await liveOf(m.code));
     if (!d) {
       $('#focusChart').innerHTML = '<div class="empty">该股票 K 线暂时取不到</div>';
@@ -4271,6 +4592,8 @@
     const meta = [...S.watch, ...S.holdings].find(x => x.code === code) || {};
     const name = (d && d.name) || meta.name || sig && sig.name || code;
     renderFocusInfo(code, { name, stage: meta.stage, sub: meta.sub, sector: meta.sector });
+    // 关注页（异动信号视图）同步 AI 上下文，点右下角图标直接用右侧这只票
+    setAiContext({ code, name, sector: meta.sector, stage: meta.stage, sub: meta.sub }, 'stock');
     $('#focusChartTitle').innerHTML = `${name}（${code}）· 关键点图
       <span class="hint">${sig ? `最近信号 ${sig.type === 'buy' ? '买点' : '卖点'} ${sig.date} · 关键点 ${fmt(sig.pivot)}${sig.stop ? ' · 止损 ' + fmt(sig.stop) : ''}` : '暂无触发信号'}</span>
       ${meta.sub ? badge(meta.stage, meta.sub, meta.sub_confirmed) : ''}`;
@@ -5987,7 +6310,7 @@
     };
     drawHoldingChart(h);
     loadInfoCards(h);
-    renderAI(h, false, '#hdAI');            // 持仓每日分析（pregen → llm → rule 三通道）
+    setAiContext(h, 'hold');                // 持仓每日分析上下文，点悬浮图标才取数
     if (tracked) {
       // 已有缓存数据立即渲染；否则先给占位，避免切页签瞬间空白
       if (S.tracking && S.tracking[h.code]) renderTimeline(S.tracking[h.code]);
@@ -6607,7 +6930,7 @@
   // 页面只读落盘的 markdown 渲染结果；缺档案时按需后台生成并轮询，不在请求里等模型。
   const RES_LABEL = { business: '主营业务', valuation: '估值·三档目标价', growth: '业绩与成长',
     peers: '竞争对手', risks: '主要风险', dependencies: '业绩依赖因素' };
-  const RES_SEQ = { focus: 0, hd: 0 };
+  const RES_SEQ = { focus: 0, hd: 0, dragon: 0 };
   const RES_TIMERS = {};
   const resEsc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -7160,16 +7483,17 @@
     }
     const h = { code: r.code, name: r.name, sector: r.industry, stage: r.stage, sub: r.sub };
     $('#mvInfo').innerHTML = infoBasicCard(prof, h) + infoFinanceCard(prof) + infoReportCard(prof);
-    renderAI(r, false, '#mvAI');
+    setAiContext(r, 'stock');                 // 只更新全局 AI 上下文，点悬浮图标才取数
     fitListHeights();
   }
 
   // ================= AI 解读：这只票今天为什么异动 =================
   // 链路：点开 → /api/ai/brief 取证（公告/龙虎榜/资金流/分时/涨停池 + 本地盘口板块）
   //        → 规则归因排序（默认通道）或预生成/模型叙述 → 追问走 /api/ai/chat 流式
+  // 全局单例：所有模块的 AI 解读都落在同一个悬浮窗 (#aiFloatHost)，
+  // 模块只负责在选中标的时更新 AI.row / AI.kind，点右下角图标才真正取数。
   const AI = { code: null, date: null, brief: null, msgs: [], ctrl: null, busy: false,
-               open: false, row: null, host: '#mvAI' };
-  // 同一时刻只保留一份 AI DOM（异动页 #mvAI / 持仓页 #hdAI 二选一），避免 id 冲突
+               open: true, row: null, kind: 'stock', host: '#aiFloatHost' };
   const $ai = sel => { const h = document.querySelector(AI.host); return h ? h.querySelector(sel) : null; };
   const AI_SRC = { notice: '公告', news: '新闻', dragon: '龙虎榜', flow: '资金流',
                    intraday: '分时', hist: '日线', zt: '涨停池' };
@@ -7179,6 +7503,41 @@
   function he(s) {
     return String(s == null ? '' : s).replace(/[&<>"]/g,
       c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  }
+
+  // AI 文本是 markdown：先转义再解析，杜绝注入。支持 **加粗**、`代码`、
+  // - / 数字列表、## 小标题，并把 [依据:xx] / [知识] / [推断] 做成标签。
+  function mdInline(s) {
+    return he(s)
+      .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\[依据:([^\]]+)\]/g, '<span class="ai-evtag">依据:$1</span>')
+      .replace(/\[知识\]/g, '<span class="ai-know">知识</span>')
+      .replace(/\[推断\]/g, '<span class="ai-infer">推断</span>');
+  }
+  function mdHtml(text) {
+    if (!text) return '';
+    const lines = String(text).split(/\r?\n/);
+    let out = '', inList = false;
+    const closeList = () => { if (inList) { out += '</div>'; inList = false; } };
+    lines.forEach(raw => {
+      const t = raw.trim();
+      if (!t) { closeList(); return; }
+      const heading = /^#{1,4}\s+(.+)$/.exec(t);
+      if (heading) { closeList(); out += `<div class="ai-md-h">${mdInline(heading[1])}</div>`; return; }
+      const bullet = /^[-*+]\s+/.test(t) || /^\d+[.、)]\s*/.test(t);
+      if (bullet) {
+        if (!inList) { out += '<div class="ai-md-list">'; inList = true; }
+        const body = t.replace(/^[-*+]\s+/, '').replace(/^\d+[.、)]\s*/, '');
+        out += `<div class="ai-md-li">${mdInline(body)}</div>`;
+        return;
+      }
+      closeList();
+      const isHead = /^\*\*[^*]+\*\*\s*[：:]/.test(t);
+      out += `<div class="ai-md-p${isHead ? ' ai-md-h' : ''}">${mdInline(t)}</div>`;
+    });
+    closeList();
+    return out;
   }
 
   // 句子列表拼成一段：去掉每句自带的句号，统一用「；」连，末尾补句号
@@ -7245,7 +7604,7 @@
     return `
       <div class="ai-headline">${he(b.headline)}</div>
       ${causes}
-      ${b.summary ? `<div class="ai-summary">${he(b.summary)}</div>` : ''}
+      ${b.summary ? `<div class="ai-summary ai-md">${mdHtml(b.summary)}</div>` : ''}
       ${counter ? `<div class="ai-side counter"><b>反证</b>　${counter}</div>` : ''}
       ${(b.risks || []).length ? `<div class="ai-side risk"><b>风险</b>　${joinSent(b.risks)}</div>` : ''}
       ${(b.watch || []).length ? `<div class="ai-side watch"><b>观察</b>　${joinSent(b.watch)}</div>` : ''}
@@ -7254,14 +7613,16 @@
 
   function aiBubbles() {
     return AI.msgs.map(m =>
-      `<div class="ai-msg ${m.role === 'user' ? 'user' : 'bot'}">${he(m.content)}</div>`).join('');
+      `<div class="ai-msg ai-md ${m.role === 'user' ? 'user' : 'bot'}">`
+      + `${m.role === 'user' ? he(m.content) : mdHtml(m.content)}</div>`).join('');
   }
 
   function aiChatHtml() {
-    const quick = AI.host === '#hdAI' ? AI_QUICK_HOLD : AI_QUICK;
-    const tip = AI.host === '#hdAI' ? '只依据上面的事实包回答，含持仓成本与止损口径' : '只依据上面的证据包回答';
+    const isHold = AI.kind === 'hold';
+    const quick = isHold ? AI_QUICK_HOLD : AI_QUICK;
+    const tip = isHold ? '只依据上面的事实包回答，含持仓成本与止损口径' : '可结合证据包与公开证券知识回答';
     return `<div class="icard ai-chat" style="margin-top:10px">
-      <h5>${AI.host === '#hdAI' ? '个股问答' : '追问'} <span class="cnt">${tip}</span></h5>
+      <h5>${isHold ? '个股问答' : '追问'} <span class="cnt">${tip}</span></h5>
       <div class="ai-chips">${quick.map(q => `<button data-q="${he(q)}">${he(q)}</button>`).join('')}</div>
       <div class="ai-msgs" id="aiMsgs">${aiBubbles()}</div>
       <div class="ai-input">
@@ -7277,15 +7638,11 @@
   }
 
   async function renderAI(r, force = false, hostSel = null) {
-    const sel = hostSel || AI.host || '#mvAI';
+    const sel = '#aiFloatHost';               // 全局唯一宿主，忽略历史 hostSel 入参
     const host = document.querySelector(sel);
     if (!host) return;
-    if (sel !== AI.host) {                    // 换宿主容器：清空旧容器，保证 id 唯一
-      const old = document.querySelector(AI.host);
-      if (old) { old.innerHTML = ''; old.classList.remove('expanded'); }
-      AI.host = sel;
-      AI.open = (sel === '#hdAI');            // 持仓页默认展开，异动页保持吸顶折叠条
-    }
+    AI.host = sel;
+    AI.open = true;                           // 悬浮窗点开即完整展开，不做吸顶折叠条
     AI.row = r;
     if (AI.code !== r.code) {                 // 换股票：中断上一路流、清空对话（展开状态保留）
       if (AI.ctrl) { try { AI.ctrl.abort(); } catch (_) {} AI.ctrl = null; }
@@ -7322,9 +7679,12 @@
     if (bar) bar.onclick = () => expandAI();
     if (cl) cl.onclick = e => {
       e.stopPropagation();
-      AI.open = false;
-      const host = document.querySelector(AI.host);
-      if (host) { host.classList.remove('expanded'); host.innerHTML = aiBarHtml(AI.brief); bindAI(); }
+      if ($('#aiFloatPanel') && $('#aiFloatPanel').classList.contains('open')) closeAiFloat();
+      else {
+        AI.open = false;
+        const host = document.querySelector(AI.host);
+        if (host) { host.classList.remove('expanded'); host.innerHTML = aiBarHtml(AI.brief); bindAI(); }
+      }
       fitListHeights();
     };
     const rf = $ai('#aiRefresh');
@@ -7332,7 +7692,7 @@
     const cp = $ai('#aiCopy');
     if (cp) cp.onclick = () => {
       const b = AI.brief || {};
-      const isHold = AI.host === '#hdAI';
+      const isHold = AI.kind === 'hold';
       const lines = [`${r.name}(${r.code}) ${b.date || ''} ${isHold ? '持仓分析' : '异动分析'}`, b.headline || ''];
       if (isHold && r.cost != null) {
         lines.push(`成本 ${r.cost} · 浮盈 ${r.pnl == null ? '—' : r.pnl + '%'}`
@@ -7411,7 +7771,8 @@
     } finally {
       AI.busy = false;
       if (btn) btn.disabled = false;
-      if (acc) { bot.textContent = acc; AI.msgs.push({ role: 'assistant', content: acc }); }
+      // 流中保持纯文本避免闪烁，结束后一次性渲染 markdown
+      if (acc) { bot.innerHTML = mdHtml(acc); AI.msgs.push({ role: 'assistant', content: acc }); }
       else bot.remove();
       aiScroll();
     }
@@ -7670,8 +8031,12 @@
   initGlobalSearch();
 
   // ================= 擒龙 · 双闸门 =================
-  const DG = { data: null, lane: 'confirmed', code: null, chart: null };
-  const DG_LABELS = { confirmed: '确认龙', retired: '退位龙', observing: '只观察' };
+  const DG = { data: null, lane: 'confirmed', code: null, chart: null,
+               date: null, dates: null, evolution: null, view: 'list', matrixSel: null,
+               detailTab: 'analyze', laneByDate: {}, rulesOpen: true };
+  const DG_LABELS = { confirmed: '确认龙', pending: '晋级未确认', retired: '退位龙', observing: '只观察' };
+  // 档位回落的优先顺序：切到某天时若记忆档位为空，依次找有数据的档
+  const DG_LANE_ORDER = ['confirmed', 'pending', 'retired', 'observing'];
 
   function dgNum(v, digits = 1) {
     if (v === null || v === undefined || v === '') return '—';
@@ -7687,12 +8052,35 @@
     return { sealed: '封板', broken: '炸板', weak: '走弱', pending: '未表态' }[state] || '—';
   }
 
-  function renderDragonTab(force = false) {
+  // 左栏两个视角：龙头列表 / 接力矩阵。右栏永远是详情，不再跟着切。
+  function setDragonLeftView(view) {
+    DG.view = view;
+    $$('#dgLeftViews button').forEach(x => x.classList.toggle('active', x.dataset.dgview === view));
+    const lv = $('#dgViewList'), mv = $('#dgViewMatrix');
+    if (lv) lv.style.display = view === 'list' ? '' : 'none';
+    if (mv) mv.style.display = view === 'matrix' ? '' : 'none';
+    if (view === 'matrix') renderDragonMatrix();
+  }
+
+  function renderDragonTab(force = false, date = null) {
     DG.lane = DG.lane || 'confirmed';
+    if (date !== null) DG.date = date;
     const load = force || !DG.data;
     if (load) {
-      api('/api/dragon').then(d => {
+      const q = DG.date ? '?date=' + encodeURIComponent(DG.date) : '';
+      api('/api/dragon' + q).then(d => {
         DG.data = d || {};
+        // 档位按「池子日」各记各的，不能沿用上一天的：从待验证的新池（314 只全是
+        // 「只观察」）切回历史日时，档位若还停在 observing，而历史日的 observing
+        // 通常是 0 → 列表空空，看起来就像「回不到那天的龙头池」。
+        const day = (d && d.date) || DG.date || '';
+        let lane = DG.laneByDate[day] || 'confirmed';
+        if (!(d[lane] || []).length) {
+          lane = DG_LANE_ORDER.find(k => (d[k] || []).length) || 'confirmed';
+        }
+        DG.lane = lane;
+        if (day) DG.laneByDate[day] = lane;
+        renderDragonDates();
         renderDragonMeta();
         renderDragonTable();
       }).catch(e => {
@@ -7705,6 +8093,73 @@
     }
   }
 
+  // 日期回溯器：优先用后端 /api/dragon/dates；服务未重启时降级用已有数据构造
+  function renderDragonDates() {
+    const box = $('#dgDates');
+    if (!box) return;
+    const cur = (DG.data || {}).date;
+    const draw = list => {
+      if (!list || !list.length) { box.innerHTML = ''; return; }
+      box.innerHTML = `<span class="flabel">回溯</span>` + list.map(x => {
+        const active = x.date === cur;
+        const label = x.date ? x.date.slice(5) : '—';
+        const nc = (x.counts && x.counts.confirmed) || 0;
+        const npd = (x.counts && x.counts.pending) || 0;
+        const tag = x.awaiting_verification ? '待验证' : (nc + '确认');
+        const tip = x.verified_on
+          ? '池子 ' + x.date + ' · 验证于 ' + x.verified_on
+            + `（确认龙 ${nc} · 晋级未确认 ${npd} · 退位龙 ${(x.counts && x.counts.retired) || 0}）`
+          : '池子 ' + x.date + ' · 待次日验证';
+        return `<button data-dgdate="${he(x.date)}" class="${active ? 'active' : ''}" title="${he(tip)}">`
+             + `${he(label)} <span class="dg-date-tag">${tag}</span></button>`;
+      }).join('');
+      box.querySelectorAll('[data-dgdate]').forEach(b => b.onclick = () => {
+        const d = b.dataset.dgdate;
+        if (d === cur) return;
+        // 点日期是想看那天的龙头，自动回到列表视角；矩阵本身跨日，不受单日切换影响
+        setDragonLeftView('list');
+        DG.code = null; DG.matrixSel = null; DG.evolution = null;
+        renderDragonTab(true, d);
+      });
+    };
+    if (DG.dates) { draw(DG.dates); return; }
+    api('/api/dragon/dates?limit=20').then(r => {
+      // 后端 /api/dragon/dates 的 data 直接就是数组；早期版本套了一层 {dates:[…]}。
+      // 之前只认后者 → 回溯那排永远是空的，用户就没有入口切回历史池子。
+      DG.dates = Array.isArray(r) ? r : ((r && r.dates) || []);
+      draw(DG.dates);
+      // 日期表拿到后才知道「最近一份已验证池」是哪天，补画的回程按钮需要它
+      if (DG.data) renderDragonMeta();
+    }).catch(() => {
+      // 降级：服务未重启（新接口 404）时，往前扫最近 12 个交易日逐日探测，
+      // 用现成的 /api/dragon?date= 拿到历史日期与数据，供回溯器和矩阵共用。
+      DG.historyData = DG.historyData || {};
+      const probe = async () => {
+        const out = [], now = new Date();
+        for (let i = 0; i < 20 && out.length < 12; i++) {
+          const dt = new Date(now.getTime() - i * 86400000);
+          const wd = dt.getDay();
+          if (wd === 0 || wd === 6) continue;
+          const s = dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0')
+            + '-' + String(dt.getDate()).padStart(2, '0');
+          try {
+            const d = await api('/api/dragon?date=' + s);
+            if (d && d.date && d.counts && Object.values(d.counts).some(v => v > 0)) {
+              out.push({ date: d.date, verified_on: d.verified_on, counts: d.counts,
+                         awaiting_verification: d.awaiting_verification });
+              DG.historyData[d.date] = d;
+            }
+          } catch (e) { /* 单日失败跳过 */ }
+        }
+        DG.dates = out;
+        draw(DG.dates);
+        if (DG.data) renderDragonMeta();
+        DG.evolution = null;  // 让矩阵重新用新拉到的历史数据组装
+      };
+      probe();
+    });
+  }
+
   function renderDragonMeta() {
     const d = DG.data || {};
     const meta = $('#dgMeta');
@@ -7714,20 +8169,199 @@
     const regimeColor = s.regime === 'ice' ? 'var(--softblue)'
       : (s.regime === 'hot' ? 'var(--up)' : 'var(--muted)');
     const c = d.counts || {};
+    // 回到已验证池：停在「待验证」新池时给一条明确回程，否则只能靠「回溯」那排
+    // 小按钮，容易以为切过去就回不来了。
+    const prevVerified = (DG.dates || []).find(x => x.date && !x.awaiting_verification);
+    const backBtn = (d.awaiting_verification && prevVerified)
+      ? `<button class="dg-newpool dg-back" data-dgback="${he(prevVerified.date)}"`
+        + ` title="有确认龙/退位龙结论的最近一份池子">← 回到已验证 ${he(prevVerified.date)}</button>`
+      : '';
     meta.innerHTML = `<span class="flabel">潜龙池</span><b>${he(d.date || '—')}</b>`
       + (d.verified_on ? `<span class="hint">验证于 ${he(d.verified_on)}</span>` : '')
       + (d.awaiting_verification ? `<span class="hint" style="color:var(--softblue)">新建池 · 待次日验证</span>` : '')
       + (d.latest_pool_date && d.latest_pool_date !== d.date
-         ? `<span class="hint">另有新池 ${he(d.latest_pool_date)} 待验证</span>` : '')
+         ? `<button class="dg-newpool" data-dgnewpool="${he(d.latest_pool_date)}"`
+           + ` title="当天建的池子要等次日走势才能定性，所以默认停在已验证日；点击查看今日新池">`
+           + `今日新池 ${he(d.latest_pool_date)} 待验证 →</button>` : '')
+      + backBtn
       + (d.intraday_date ? `<span class="hint">盘中 ${he(d.intraday_date)}</span>` : '')
       + `<span style="color:var(--line)">|</span>`
       + `<span style="color:${regimeColor}">${he(regime)}</span>`
       + (s.updown_ratio !== null && s.updown_ratio !== undefined
-         ? `<span class="hint">涨跌比 ${dgNum(s.updown_ratio, 2)} · 涨停 ${s.limit_up ?? '—'} / 跌停 ${s.limit_down ?? '—'}</span>` : '');
+         ? `<span class="hint">涨跌比 ${dgNum(s.updown_ratio, 2)} · 涨停 ${s.limit_up ?? '—'} / 跌停 ${s.limit_down ?? '—'}</span>` : '')
+      // 监管额度汇总：这一池子里有多少只已经踩到异动线/临界，决定整体连板空间
+      + (() => {
+          const g = d.reg_stats || {};
+          const sev = g.severe || 0, wr = (g.alert || 0) + (g.warn || 0), nr = g.near || 0;
+          if (!sev && !wr && !nr) return '';
+          return `<span class="dg-reg-sum" title="按交易所异常波动条款统计当前档位：严重异常波动 / 已触发异动（含 2 次） / 临界。点开个股看具体额度。">`
+            + `监管 <b class="lv-severe">${sev}</b> 严重 · <b class="lv-warn">${wr}</b> 异动 · <b class="lv-near">${nr}</b> 临界</span>`;
+        })();
     const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
     set('#dgCntConfirmed', c.confirmed ?? 0);
+    set('#dgCntPending', c.pending ?? 0);
     set('#dgCntRetired', c.retired ?? 0);
     set('#dgCntObserve', c.observing ?? 0);
+    // 待验证的新池整池都落在 observing 档，这时候按钮写「只观察」会被误读成
+    // 「今天全是废票」。改叫「潜龙池」，语义才对（这些是等次日验证的候选）。
+    const obsLabel = $('#dgLaneObsLabel');
+    if (obsLabel) obsLabel.textContent = d.awaiting_verification ? '潜龙池' : '只观察';
+    // 默认档位被自动切换时，同步按钮高亮，避免「显示只观察但高亮确认龙」
+    $$('#dgLanes button').forEach(b => b.classList.toggle('active', b.dataset.dglane === DG.lane));
+    // 今日新池入口：切到那天并回列表视角（矩阵跨日，不受单日切换影响）
+    const np = meta.querySelector('[data-dgnewpool]');
+    if (np) np.onclick = () => {
+      if (np.dataset.dgnewpool === (DG.data || {}).date) return;
+      setDragonLeftView('list');
+      DG.code = null; DG.matrixSel = null; DG.evolution = null;
+      renderDragonTab(true, np.dataset.dgnewpool);
+    };
+    // 回程按钮：同上，切回最近一份已验证的池子
+    const bk = meta.querySelector('[data-dgback]');
+    if (bk) bk.onclick = () => {
+      if (bk.dataset.dgback === (DG.data || {}).date) return;
+      setDragonLeftView('list');
+      DG.code = null; DG.matrixSel = null; DG.evolution = null;
+      renderDragonTab(true, bk.dataset.dgback);
+    };
+  }
+
+  // 接力矩阵：优先用后端 /api/dragon/evolution；服务未重启时降级，用已有
+  // /api/dragon?date= 逐日拉取后前端自组装（逻辑与后端 evolution 对齐，零新增依赖）
+  function buildEvolutionFallback() {
+    const list = (DG.dates || []).filter(x => !x.awaiting_verification && x.date);
+    const vdates = list.map(x => x.date).sort();
+    if (!vdates.length) return { dates: [], stocks: [], summary: '', empty: true };
+    const meta = {}, cells = {};
+    vdates.forEach(d => {
+      const dObj = (DG.historyData || {})[d];
+      const items = [].concat((dObj && dObj.confirmed) || [], (dObj && dObj.pending) || [],
+                              (dObj && dObj.retired) || []);
+      items.forEach(it => {
+        const code = it.code;
+        if (!code) return;
+        // 档位直接用后端给的 status（含「晋级未确认」），不要再按 confirmed 列表猜
+        const st = it.status === 'confirmed' ? 'confirmed'
+          : (it.status === 'pending' ? 'pending' : 'retired');
+        if (!meta[code]) meta[code] = { code, name: it.name || code, industry: it.industry || '—' };
+        (cells[code] = cells[code] || {})[d] = {
+          status: st, score: it.score, now_lbc: it.now_lbc, advanced: it.advanced,
+        };
+      });
+    });
+    // 反包标记
+    vdates.forEach((d, i) => {
+      if (!i) return;
+      const prev = vdates[i - 1];
+      Object.values(cells).forEach(m => {
+        if (m[d] && m[d].status === 'confirmed' && m[prev] && m[prev].status === 'retired') {
+          m[d].status = 'rebound';
+        }
+      });
+    });
+    const rows = Object.keys(meta).map(code => {
+      const m = cells[code] || {};
+      const n = Object.values(m).filter(c => c.status === 'confirmed' || c.status === 'rebound').length;
+      return { ...meta[code], confirmed_days: n,
+               max_score: Math.max(0, ...Object.values(m).map(c => c.score || 0)), cells: m };
+    }).filter(r => r.confirmed_days > 0)
+      .sort((a, b) => b.confirmed_days - a.confirmed_days || b.max_score - a.max_score).slice(0, 20);
+    // 交接摘要
+    let summary = '';
+    if (vdates.length >= 2) {
+      const last = vdates[vdates.length - 1], prev = vdates[vdates.length - 2];
+      const stay = [], rebound = [], fresh = [], pend = [], retired = [];
+      rows.forEach(r => {
+        const cur = r.cells[last], before = r.cells[prev];
+        if (cur && (cur.status === 'confirmed' || cur.status === 'rebound')) {
+          if (before && before.status === 'confirmed') stay.push(`${r.name}(${cur.now_lbc || 0}板)续任`);
+          else if (cur.status === 'rebound') rebound.push(`${r.name}反包回归`);
+          else fresh.push(`${r.name}新晋确认`);
+        } else if (cur && cur.status === 'pending' && before
+                   && (before.status === 'confirmed' || before.status === 'rebound')) {
+          pend.push(`${r.name}晋级未确认(${cur.score || 0}分)`);
+        } else if (cur && cur.status === 'retired' && before && before.status === 'confirmed') {
+          retired.push(`${r.name}退位`);
+        }
+      });
+      const parts = [stay[0], rebound.slice(0, 3).join('、'), fresh.slice(0, 3).join('、'),
+                     pend.slice(0, 3).join('、'), retired.slice(0, 3).join('、')].filter(Boolean);
+      summary = parts.length ? `${last} 交接：${parts.join(' · ')}` : `${last} 交接：龙头格局未变`;
+    }
+    return { dates: vdates, stocks: rows, summary, empty: !rows.length };
+  }
+
+  async function renderDragonMatrix() {
+    const box = $('#dgMatrix'), sum = $('#dgMatrixSummary');
+    if (!box) return;
+    if (!DG.evolution) {
+      try {
+        const r = await api('/api/dragon/evolution?days=10');
+        if (r && r.dates && r.dates.length) DG.evolution = r;
+      } catch (e) { /* 新接口未加载，走降级 */ }
+      if (!DG.evolution) {
+        // 降级需要历史每日数据：若日期回溯器还没拉过，这里补拉
+        if (!DG.historyData) {
+          DG.historyData = {};
+          const list = (DG.dates || []).filter(x => !x.awaiting_verification && x.date);
+          await Promise.all(list.map(async x => {
+            try { DG.historyData[x.date] = await api('/api/dragon?date=' + encodeURIComponent(x.date)); }
+            catch (e) { /* 单日失败跳过 */ }
+          }));
+        }
+        DG.evolution = buildEvolutionFallback();
+      }
+    }
+    const ev = DG.evolution || { dates: [], stocks: [], summary: '' };
+    if (sum) sum.innerHTML = ev.summary
+      ? `<span class="dg-summary-tag">交接</span> ${he(ev.summary)}`
+      : `<span class="hint">接力矩阵需要至少两个已验证交易日的数据，明天起会自动生成交接摘要。</span>`;
+    if (!ev.stocks.length) {
+      box.innerHTML = `<div class="empty">暂无龙头接力数据。每个交易日 15:45 验证后，这里会逐日累积。</div>`;
+      return;
+    }
+    const dates = ev.dates || [];
+    let html = `<div class="dg-mx-scroll"><table class="dg-mx"><thead><tr><th class="dg-mx-name">个股 / 池子日</th>`
+      + dates.map(d => `<th>${he(d.slice(5))}</th>`).join('') + `</tr></thead><tbody>`;
+    ev.stocks.forEach(s => {
+      html += `<tr><td class="dg-mx-name" title="${he(s.industry || '')}">${he(s.name)}`
+        + `<span class="dg-mx-days">${s.confirmed_days}确认</span></td>`;
+      dates.forEach(d => {
+        const c = (s.cells || {})[d];
+        if (!c) { html += `<td class="dg-mx-cell dg-mx-none">—</td>`; return; }
+        const cls = c.status === 'confirmed' ? 'dg-mx-conf'
+          : (c.status === 'rebound' ? 'dg-mx-reb'
+            : (c.status === 'pending' ? 'dg-mx-pend' : 'dg-mx-ret'));
+        const label = c.status === 'confirmed' ? '确认'
+          : (c.status === 'rebound' ? '反包'
+            : (c.status === 'pending' ? '晋级' : '退位'));
+        const tip = `${s.name} · ${d}（验证于次日）· ${label} ${c.score ?? '—'}分 · ${c.now_lbc || 0}板`;
+        const selCls = DG.matrixSel === s.code + '|' + d ? ' sel' : '';
+        html += `<td class="dg-mx-cell ${cls}${selCls}" data-code="${he(s.code)}" data-date="${he(d)}" `
+          + `data-name="${he(s.name)}" data-score="${c.score ?? ''}" data-lbc="${c.now_lbc || 0}" `
+          + `data-status="${c.status}" title="${he(tip)}">${label}<b>${c.score ?? '—'}</b></td>`;
+      });
+      html += `</tr>`;
+    });
+    html += `</tbody></table></div><div class="hint" style="margin-top:6px">`
+      + `<span class="dg-mx-conf dg-mx-legend">确认</span> `
+      + `<span class="dg-mx-reb dg-mx-legend">反包</span> `
+      + `<span class="dg-mx-pend dg-mx-legend">晋级</span> `
+      + `<span class="dg-mx-ret dg-mx-legend">退位</span> · 点格子查看该股当日 K 线</div>`;
+    box.innerHTML = html;
+    box.querySelectorAll('td[data-code]').forEach(td => td.onclick = () => {
+      const code = td.dataset.code;
+      // 构造一个简化 item 供详情面板用（历史日期的标的可能不在当前档位数据里）
+      const fallback = { code, name: td.dataset.name, status: td.dataset.status,
+                         score: td.dataset.score ? Number(td.dataset.score) : null,
+                         now_lbc: Number(td.dataset.lbc) || 0,
+                         reasons: [], score_detail: {}, quote: {} };
+      DG.code = code;
+      DG.matrixSel = code + '|' + td.dataset.date;
+      box.querySelectorAll('td[data-code]').forEach(x => x.classList.toggle('sel', x === td));
+      // 左栏保持矩阵视角，右栏直接更新详情；格子高亮，点下去有明确反馈
+      renderDragonDetail(code, fallback);
+    });
   }
 
   function dgIntraState(code) {
@@ -7738,6 +8372,42 @@
       if (it) return { state: it.state, slot: k };
     }
     return { state: null, slot: null };
+  }
+
+  // 左栏小徽章：把作战计划压成 2–4 个字，扫一眼就知道该打、该等还是别碰。
+  // 判定顺序与右栏作战卡保持一致：情绪 → 身份 → 当日盘中状态。
+  function dgPlanSignal(it) {
+    const d = DG.data || {};
+    const sent = d.sentiment || {};
+    const slots = d.intraday || {};
+    const at = k => { const s = slots[k]; return s ? (s.items || []).find(x => x.code === it.code) : null; };
+    const op = at('open'), mid = at('mid'), cl = at('close');
+    const limChg = dgLimitPct(it.code) * 100;
+    if (sent.ice) return { label: '冰点·不碰', cls: 'avoid', tip: '情绪冰点：系统把确认龙降级为只观察，不提示买入' };
+    if (it.status === 'retired') return { label: '等反包', cls: 'wait', tip: '退位龙：次日没晋级、掉队了。不买入，等重新晋级（接力矩阵标 rebound）再二次上车' };
+    if (it.status === 'pending') {
+      // 晋级 ≠ 确认：还在板上但四支柱不够硬，只能盯回封，不给买入信号
+      const cmin = Number(d.confirm_min ?? 68);
+      const sc = it.score;
+      const gap = (sc === null || sc === undefined) ? null : cmin - Number(sc);
+      return { label: '晋级·待', cls: 'pend',
+        tip: `晋级未确认：已晋级到 ${it.now_lbc || 0} 板，但四支柱 ${sc ?? '—'} 分`
+          + (gap !== null && gap > 0 ? `，差 ${gap} 分` : '')
+          + `未达 ${cmin} 门槛 → 不算确认龙。盯是否回封、次日能否再晋级` };
+    }
+    if (it.status === 'observe' || d.awaiting_verification) return { label: '待验证', cls: 'wait', tip: '潜龙：等次日验证晋级 + 四支柱≥68 才确认' };
+    if (cl) {
+      if (cl.state === 'broken') return { label: '炸板·避', cls: 'avoid', tip: '14:45 仍炸板：封板失败，按卖出铁律不接' };
+      if (cl.state === 'weak') return { label: '走弱·避', cls: 'avoid', tip: '14:45 走弱（跌破前收 3% 以上）：不接' };
+      if (cl.state === 'sealed') {
+        if (mid && mid.state === 'broken') return { label: '已回封', cls: 'buy', tip: '10:00 炸板 → 14:45 回封：分歧转一致，首选买点' };
+        if (op && op.state === 'sealed' && op.chg != null && Number(op.chg) >= limChg * 0.9)
+          return { label: '一字板', cls: 'warn', tip: '开盘即封死：买不到货，开板易接盘，不追' };
+        return { label: '封板', cls: 'buy', tip: '14:45 封板：强度在，可等次日竞价或回封再进' };
+      }
+      return { label: '待表态', cls: 'wait', tip: '14:45 未表态：缩量不破位可尾盘小仓低吸' };
+    }
+    return { label: '确认龙', cls: 'buy', tip: '已确认但无当日盘中快照；按作战计划的三种买点执行' };
   }
 
   function renderDragonTable() {
@@ -7756,11 +8426,25 @@
       const intraHtml = intra.state
         ? `<span class="dg-badge ${intra.state}">${dgStateLabel(intra.state)}</span>` : '—';
       const chg = (r.quote || {}).chg;
+      const sig = dgPlanSignal(r);
+      const rg = dgReg(r.reg);
+      // 列表里也能比四支柱：得分列悬停给出拆分与过线情况，不用逐个点进右栏
+      const sd = r.score_detail || {};
+      const sdTotal = ['height', 'strength', 'drive', 'money']
+        .reduce((a, k) => a + (Number(sd[k]) || 0), 0);
+      const cmin = Number(d.confirm_min ?? 68);
+      const sdTip = Object.keys(sd).length
+        ? `四支柱 高度${sd.height ?? 0} · 强度${sd.strength ?? 0} · 带动${sd.drive ?? 0} · 资金${sd.money ?? 0}`
+          + `（合计 ${sdTotal}，门槛 ${cmin}，${sdTotal >= cmin ? '过线 +' + (sdTotal - cmin) : '差 ' + (cmin - sdTotal) + ' 分'}）`
+        : '待次日验证后打分';
       return `<tr class="dg-row ${DG.code === r.code ? 'sel' : ''}" data-code="${he(r.code)}">`
-        + `<td>${he(r.code)}</td><td>${he(r.name || '')}</td>`
-        + `<td class="num">${r.score !== null && r.score !== undefined ? dgNum(r.score, 0) : '—'}</td>`
-        + `<td class="num">${r.now_lbc ?? r.prev_lbc ?? '—'}</td>`
-        + `<td class="num">${r.metrics ? (r.metrics.zbc ?? '—') : '—'}</td>`
+        + `<td>${he(r.code)}</td>`
+        + `<td>${he(r.name || '')}<span class="dg-act ${sig.cls}" title="${he(sig.tip)}">${he(sig.label)}</span>`
+        + (rg ? `<span class="dg-reg-tag ${rg.cls}" title="${dgRegTipAttr(r.reg)}">${rg.text}</span>` : '')
+        + `</td>`
+        + `<td class="num" title="${he(sdTip)}">${r.score !== null && r.score !== undefined ? dgNum(r.score, 0) : '—'}</td>`
+        + `<td class="num">${r.now_lbc ?? r.prev_lbc ?? r.lbc ?? '—'}</td>`
+        + `<td class="num">${r.metrics ? (r.metrics.zbc ?? '—') : (r.zbc ?? '—')}</td>`
         + `<td>${he(r.industry || '')}</td>`
         + `<td>${r.stage != null ? 'S' + r.stage : '—'}</td>`
         + `<td class="num dg-px">${dgNum((r.quote || {}).price)}</td>`
@@ -7806,11 +8490,114 @@
     await Promise.all(Array.from({ length: Math.min(6, need.length) }, worker));
   }
 
-  function renderDragonDetail(code) {
+  // ================= 交易监管 · 异动额度 =================
+  // 后端 engines/regwatch.py 按交易所异常波动条款算：3 日偏离触线＝已异动，
+  // 10 个交易日内 3 次＝严重异常波动（可被要求停牌核查、账户重点监控）。
+  // 游资「卡异动」算的就是这里剩下的额度，所以它必须出现在列表和详情里。
+  const DG_REG_STYLE = {
+    severe: { text: '严重异动', cls: 'severe' },
+    warn: { text: '异动×2', cls: 'warn' },
+    alert: { text: '异动', cls: 'alert' },
+    near: { text: '临界异动', cls: 'near' },
+  };
+  function dgReg(g) {
+    if (!g || !g.level) return null;
+    return DG_REG_STYLE[g.level] || null;
+  }
+  function dgRegNum(v, unit = '%') {
+    if (v === null || v === undefined) return '—';
+    return (v > 0 ? '+' : '') + Number(v).toFixed(1) + unit;
+  }
+  // 悬停说明：把「为什么标红」讲透 —— 阈值、已走多少、还剩几个板的额度
+  function dgRegTip(g) {
+    if (!g) return '暂无监管数据（日K不足或未回补）';
+    const out = [
+      `交易监管：${g.label}（${g.board} 口径）`,
+      `3 日偏离 ${dgRegNum(g.d3)} / 阈值 ${(g.th3 * 100).toFixed(0)}%`,
+      `10 日累计 ${dgRegNum(g.d10)} / 阈值 ${(g.th10 * 100).toFixed(0)}%`,
+      `30 日累计 ${dgRegNum(g.d30)} / 阈值 ${(g.th30 * 100).toFixed(0)}%`,
+      `近 10 日异动 ≈${g.cnt} 次 / 满 3 次构成严重异常波动`,
+    ];
+    if (g.room_pct !== null && g.room_pct !== undefined) {
+      out.push(g.room_pct <= 0
+        ? `距下一次异动：已超 ${Math.abs(g.room_pct).toFixed(1)} 个百分点`
+        : `距下一次异动：还能涨 ${g.room_pct.toFixed(1)}%（约 ${g.room_boards} 个板）`);
+    }
+    if (g.room10_pct !== null && g.room10_pct !== undefined) {
+      out.push(g.room10_pct <= 0
+        ? `10 日累计已破 ${(g.th10 * 100).toFixed(0)}% 线`
+        : `距 10 日 ${(g.th10 * 100).toFixed(0)}% 线：还能涨 ${g.room10_pct.toFixed(1)}%（约 ${g.room10_boards} 个板）`);
+    }
+    return out.join('\n');
+  }
+  function dgRegTipAttr(g) {
+    return he(dgRegTip(g)).replace(/\n/g, '&#10;');
+  }
+  function renderDgReg(it) {
+    const box = $('#dgReg');
+    if (!box) return;
+    let g = it && it.reg;
+    // 矩阵格子点进来的 fallbackItem 只有几个字段，监管数据按代码回当前日数据里找
+    if (!g && it && it.code && DG.data) {
+      const all = [].concat(DG.data.confirmed || [], DG.data.pending || [],
+                            DG.data.retired || [], DG.data.observing || []);
+      const hit = all.find(x => x.code === it.code);
+      g = hit && hit.reg;
+    }
+    if (!g) { box.innerHTML = ''; return; }
+    const st = dgReg(g);
+    const lvCls = st ? st.cls : 'none';
+    const head = st
+      ? `<span class="dg-reg-badge ${lvCls}">${st.text}</span>`
+      : `<span class="dg-reg-badge none">监管正常</span>`;
+    const bar = (label, val, th, cls) => {
+      const pct = (val === null || val === undefined) ? 0
+        : Math.max(0, Math.min(100, Math.abs(val) / (th * 100) * 100));
+      return `<span class="dg-reg-bar"><span class="dg-reg-bl">${label}</span>`
+        + `<span class="dg-reg-track"><span class="dg-reg-fill ${cls}" style="width:${pct.toFixed(0)}%"></span></span>`
+        + `<span class="dg-reg-bv">${dgRegNum(val)}<small>/${(th * 100).toFixed(0)}%</small></span></span>`;
+    };
+    const d3cls = (g.d3 ?? 0) >= g.th3 * 100 ? 'hit' : ((g.d3 ?? 0) >= g.th3 * 72 ? 'near' : '');
+    const d10cls = (g.d10 ?? 0) >= g.th10 * 100 ? 'hit' : ((g.d10 ?? 0) >= g.th10 * 72 ? 'near' : '');
+    const room = (g.room_pct === null || g.room_pct === undefined) ? ''
+      : (g.room_pct <= 0
+        ? `<b style="color:var(--up)">3 日偏离已超阈值 ${Math.abs(g.room_pct).toFixed(1)} 个百分点</b>`
+        : `距下次异动还能涨 <b>${g.room_pct.toFixed(1)}%</b>（约 ${g.room_boards} 个板）`);
+    const room10 = (g.room10_pct === null || g.room10_pct === undefined) ? ''
+      : (g.room10_pct <= 0
+        ? `<b style="color:var(--up)">10 日累计已超 ${(g.th10 * 100).toFixed(0)}% 线</b>`
+        : `距 10 日 ${(g.th10 * 100).toFixed(0)}% 线还有 <b>${g.room10_pct.toFixed(1)}%</b>（约 ${g.room10_boards} 个板）`);
+    const why = g.level === 'severe'
+      ? `<span style="color:var(--up)">已构成严重异常波动：交易所可要求停牌核查、对异常账户重点监控，游资通常在此前卡板出货。</span>`
+      : (g.level === 'warn'
+        ? `<span style="color:#e08a2e">再触发 1 次即构成严重异常波动（10 日内 3 次），连板高度已接近监管上限。</span>`
+        : (g.level === 'alert'
+          ? `<span style="color:var(--soft)">已触发异常波动：公司须发异动公告并核实。通常仍可继续，但额度在快速消耗。</span>`
+          : (g.level === 'near'
+            ? `<span style="color:var(--softblue)">再拉 1 个板即触发异常波动公告。</span>`
+            : `<span style="color:var(--muted)">离异动线还有空间，连板暂不受监管额度约束。</span>`)));
+    const dots = [1, 2, 3].map(i => `<i class="dg-reg-dot ${i <= g.cnt ? 'on' : ''}"></i>`).join('');
+    box.innerHTML = `<div class="dg-reg-card lv-${lvCls}">`
+      + `<div class="dg-reg-hd"><span class="dg-reg-title">交易监管</span>${head}`
+      + `<span class="hint">${he(g.board)} 口径 · 交易所异常波动条款 · 截至 ${he(g.as_of || '—')}</span>`
+      + `<span class="dg-reg-cnt" title="近 10 个交易日内同向异常波动次数，满 3 次即严重异常波动">异动 ${dots}<b>${g.cnt}/3</b></span>`
+      + `</div>`
+      + `<div class="dg-reg-bars">${bar('3 日偏离', g.d3, g.th3, d3cls)}`
+      + `${bar('10 日累计', g.d10, g.th10, d10cls)}</div>`
+      + `<div class="dg-reg-room">`
+      + (room ? `<div>${room}</div>` : '')
+      + (room10 ? `<div>${room10}</div>` : '')
+      + `</div>`
+      + `<div class="dg-reg-why">${why}</div>`
+      + `</div>`;
+  }
+
+  function renderDragonDetail(code, fallbackItem = null) {
     const d = DG.data || {};
-    const all = [].concat(d.confirmed || [], d.retired || [], d.observing || []);
-    const it = all.find(x => x.code === code);
+    const all = [].concat(d.confirmed || [], d.pending || [], d.retired || [], d.observing || []);
+    const it = all.find(x => x.code === code) || fallbackItem;
     if (!it) return;
+    DG.currentItem = it;   // 弹窗「完整档案」复用当前标的（含矩阵历史股）
     const detail = $('#dgDetail');
     const emptyD = $('#dgEmptyDetail');
     if (detail) detail.style.display = '';
@@ -7821,29 +8608,91 @@
     const parts = it.score_detail || {};
     const pmax = { height: 25, strength: 25, drive: 25, money: 25 };
     const plabel = { height: '高度', strength: '强度', drive: '带动', money: '资金' };
+    // 计分口径逐项写出来（含「输入缺失给中性分」的兜底），用户才能判断低分是
+    // 真弱还是数据没拿到。文案对应后端 engines/dragon.py: score_one。
+    const prule = {
+      height: '0板3 / 1板7 / 2板13 / 3板18 / 4板22 / ≥5板25；连板数≥同题材涨停家数且该题材≥2只时 +3，上限25。验证时按晋级后的板数算。',
+      strength: '首封 09:34 前 9 / 10:00 前 6 / 10:30 前 4 / 更晚 2（无首封数据给 4）；炸板 0次 9 / 1次 5 / 2次 2 / ≥3次 0；封单占成交 ≥10% 7 / ≥5% 5 / ≥2% 3 / 更低 1（无成交额给 3）。',
+      drive: '同题材涨停 ≥5只 12 / ≥3只 9 / ≥2只 6 / ≥1只 3 / 0只 2；板块主力净流入为正 +6、为负 +1、查无 +3；板块资金排名前10 再 +4。本项实测天花板 22（12+6+4），永远拿不到 25。',
+      money: '上龙虎榜且净买为正 10、上榜但净卖 3、未上榜 4；个股主力净流入为正 +8、为负 +2、缺失 +3；换手 3~25% 7 / >35% 3（偏高警示）/ 其余 4 / 缺失 +3。'
+    };
     // 柱子按分数深浅分级，数值差异一眼可见：≥20 强（红）/ ≥15 中上（橙）/
     // ≥10 中（蓝）/ <10 弱（灰）。深浅主题都用实色，避免浅色主题下四条糊成一片。
-    const barColor = v => v >= 20 ? '#e0392b' : (v >= 15 ? '#ff6b1a'
-      : (v >= 10 ? '#3d7dfa' : '#9aa4b6'));
+    // 同时给档位词——25 分制下 15 分只是「中上」，光看柱长容易高估。
+    const plevel = v => v >= 20 ? ['强', '#e0392b', 'lv-a'] : (v >= 15 ? ['中上', '#ff6b1a', 'lv-b']
+      : (v >= 10 ? ['中', '#3d7dfa', 'lv-c'] : ['弱', '#9aa4b6', 'lv-d']));
     const scoreBox = $('#dgScore');
+    // 一行「现在该盯什么」放在四支柱最上方；非确认龙不显示
+    const dslots = d.intraday || {};
+    const wAt = s => { const x = dslots[s]; return x ? (x.items || []).find(y => y.code === code) : null; };
+    renderDgWatchBrief(code, it, { op: wAt('open'), mid: wAt('mid'), cl: wAt('close') });
     if (scoreBox) {
-      const statusCls = it.status === 'confirmed' ? 'confirmed' : (it.status === 'observe' ? 'observe' : 'retired');
+      // 晋级未确认单独一个徽章色（紫），别和「退位」的灰、确认的红色混
+      const statusCls = it.status === 'confirmed' ? 'confirmed'
+        : (it.status === 'observe' ? 'observe' : (it.status === 'pending' ? 'pend' : 'retired'));
       scoreBox.innerHTML = `<span class="dg-score">${it.score != null ? dgNum(it.score, 0) : '—'}<small> / 100</small></span>`
         + ` <span class="dg-badge ${statusCls}">${DG_LABELS[it.status] || it.status || '—'}</span>`
         + ` <span class="hint">连板 ${it.now_lbc ?? it.prev_lbc ?? '—'} · 晋级 ${it.advanced ? '是' : '否'}</span>`;
     }
+    // 监管异动额度：连板能被交易所「卡」住的位置，放在分数下面第一块
+    renderDgReg(it);
     const bars = $('#dgBars');
     if (bars) {
       if (!Object.keys(parts).length) {
         bars.innerHTML = `<div class="hint">尚未打分（闸门一出池即观察，等待次日验证）</div>`;
       } else {
-        bars.innerHTML = Object.keys(plabel).map(k => {
-          const v = parts[k] ?? 0;
-          const pct = Math.max(0, Math.min(100, v / pmax[k] * 100));
-          return `<div class="dg-bar-row"><span class="dg-bl">${plabel[k]}</span>`
-            + `<span class="dg-bar-track"><span class="dg-bar-fill" style="width:${pct}%;background:${barColor(v)}"></span></span>`
-            + `<span class="dg-bv">${v}</span></div>`;
-        }).join('');
+        // 门槛取自接口的 confirm_min（后端 engines/dragon.py: CONFIRM_MIN），
+        // 不在前端硬编码，避免阈值调整后两处对不上。
+        const cmin = Number(d.confirm_min ?? 68);
+        const total = Object.keys(plabel).reduce((a, k) => a + (Number(parts[k]) || 0), 0);
+        const over = total - cmin;
+        // 晋级与否和分数是两道独立的门：没晋级就算 100 分也不能算确认龙，
+        // 所以门槛行必须把「分数够/不够」和「有没有晋级」分开讲。
+        const gate = it.advanced
+          ? (over >= 0
+              ? `<span style="color:var(--up)">已过线 +${over}</span>`
+              : `<span style="color:var(--softblue)">晋级成立，差 ${-over} 分未过线 → 晋级未确认</span>`)
+          : `<span style="color:var(--muted)">未晋级 → 分数不参与确认</span>`;
+        bars.innerHTML = `<div class="dg-thresh">合计 <b>${total}</b> / 100`
+          + `<span style="color:var(--line)">|</span>门槛 <b>${cmin}</b>`
+          + `<span style="color:var(--line)">|</span>${gate}</div>`
+          // 规则写在柱子上面：以前只藏在 title 里，得先猜到「有提示」才看得见
+          + `<div class="dg-rules${DG.rulesOpen === false ? ' folded' : ''}" id="dgRules">`
+          + `<div class="dg-rules-hd"><b>计分规则</b>`
+          + `<span>每根柱 25 分</span>`
+          + `<span class="dg-rules-tip">鼠标停在柱子上 → 看本股每一小项实际得了几分</span>`
+          + `<button class="dg-rules-tg" data-dgrules="1">${DG.rulesOpen === false ? '展开' : '收起'}</button></div>`
+          + `<div class="dg-rules-bd">` + Object.keys(plabel).map(k =>
+              `<div class="dg-rule-row"><b>${plabel[k]}</b><span>${he(prule[k])}</span></div>`).join('')
+          + `</div></div>`
+          + Object.keys(plabel).map(k => {
+              const v = Number(parts[k]) || 0;
+              const lv = plevel(v);
+              const pct = (Math.max(0, Math.min(100, v / pmax[k] * 100))).toFixed(1);
+              // 逐项公式：后端 score_one 会把「哪一小项得几分」一起落盘（score_items），
+              // 这里拼成「连板 3 板 → 18 分 / 炸板 1 次 → 5 分 = 23 分」，一眼能核对。
+              const rows = ((it.score_items || {})[k]) || [];
+              const calc = rows.length
+                ? rows.map(x => `${x.name} → ${x.pts} 分`
+                    + (x.max && x.max < 25 ? `（该项上限 ${x.max}）` : '')
+                    + (x.note ? ` · ${x.note}` : '')).join('\n')
+                  + `\n= ${v} 分`
+                : `逐项明细未落盘（旧数据重跑一次验证即可）\n按规则：${prule[k]}`;
+              const tip = `${plabel[k]} ${v}/${pmax[k]}（${lv[0]}）\n${calc}\n\n规则：${prule[k]}`;
+              return `<div class="dg-bar-row" title="${he(tip)}">`
+                + `<span class="dg-bl">${plabel[k]}</span>`
+                + `<span class="dg-bar-track"><span class="dg-bar-fill" style="width:${pct}%;background:${lv[1]}"></span></span>`
+                + `<span class="dg-bv">${v}<small>/${pmax[k]}</small></span>`
+                + `<span class="dg-blevel ${lv[2]}">${lv[0]}</span></div>`;
+            }).join('');
+        // 规则区展开/收起：只改 class，不重绘整块，避免柱子动画闪一下
+        const tg = bars.querySelector('[data-dgrules]');
+        if (tg) tg.onclick = () => {
+          DG.rulesOpen = DG.rulesOpen === false;
+          const box = bars.querySelector('#dgRules');
+          if (box) box.classList.toggle('folded', DG.rulesOpen === false);
+          tg.textContent = DG.rulesOpen === false ? '展开' : '收起';
+        };
       }
     }
     const reasons = $('#dgReasons');
@@ -7900,8 +8749,13 @@
       intra.innerHTML = `<div class="hint">盘中晋级轨迹（腾讯快照）</div><div class="dg-itrack">`
         + (chips || '<span class="dg-islot">暂无盘中数据</span>') + `</div>`;
     }
+    // 作战计划：买点 / 卖点 / 仓位 / 价格锚，随选中标的更新
+    renderDgPlan(code, it);
     // 统一图位渲染（分时 / 全屏 / 周期切换由图位系统提供）
     drawDragonChart(code);
+    // AI 解读改由全局右下角悬浮入口承载：只更新上下文，面板关着时不发请求
+    setAiContext({ code, name: it.name || code, industry: it.industry,
+                   stage: it.stage, sub: it.sub }, 'stock');
   }
 
   // 擒龙 K 线：统一走图位系统（与关注/异动/持仓一致），自动获得
@@ -7919,21 +8773,406 @@
       const bs = withLive.bars || [];
       const last = bs[bs.length - 1];
       const isOne = last && last[0] === last[1] && last[1] === last[2] && last[2] === last[3];
-      draw('dgChart', withLive, { code: code });
+      // 三条作战参考线：涨停挂单价（买点）/ MA5（低吸）/ -5%（硬止损）
+      const a = dgAnchorOf(code, chart, live);
+      const hlines = [
+        { price: a.lim, label: '涨停 ' + fmt(a.lim), color: '#e0392b', type: 'dashed', width: 1.2 },
+        { price: a.ma5, label: 'MA5 ' + fmt(a.ma5), color: '#4d8dff', type: 'dotted', width: 1.1 },
+        { price: a.stop, label: '止损 ' + fmt(a.stop), color: '#2ecc71', type: 'dashed', width: 1.1 },
+      ].filter(l => l.price != null && Number.isFinite(l.price));
+      draw('dgChart', withLive, { code: code, hlines });
       const lg = $('#dgLegend');
       if (lg) lg.innerHTML = legendHtml(withLive)
+        + `<span><i style="background:#e0392b"></i>涨停挂单价</span>`
+        + `<span><i style="background:#4d8dff"></i>MA5 低吸</span>`
+        + `<span><i style="background:#2ecc71"></i>-5% 止损</span>`
         + (isOne ? `<span class="hint" style="color:#f5c876">◆ 最新交易日为一字板（开=高=低=收），K 线呈一条细线属正常现象</span>` : '');
     } catch (e) {
       el.innerHTML = '<div class="empty">K 线加载失败：' + he(e.message || '未知错误') + '</div>';
     }
   }
 
+  // 擒龙右栏 tab：四支柱 / 作战计划。K 线图在 tab 外常驻，
+  // 切到作战计划时仍能对着图看价格锚。
+  function setDragonDetailTab(tab) {
+    DG.detailTab = tab;
+    $$('#dgDetailTabs button').forEach(b => b.classList.toggle('active', b.dataset.dgtab === tab));
+    const an = $('#dgPaneAnalyze'), pl = $('#dgPanePlan');
+    if (an) an.style.display = tab === 'analyze' ? '' : 'none';
+    if (pl) pl.style.display = tab === 'plan' ? '' : 'none';
+    // 反包标记要靠接力矩阵数据，列表视图默认没拉，按需补一次（只读落盘）
+    if (tab === 'plan' && !DG.evolution && DG.code) {
+      api('/api/dragon/evolution').then(r => {
+        DG.evolution = r || null;
+        const it = [].concat((DG.data || {}).confirmed || [], (DG.data || {}).pending || [],
+                             (DG.data || {}).retired || [],
+                             (DG.data || {}).observing || []).find(x => x.code === DG.code);
+        if (it) renderDgPlan(DG.code, it);
+      }).catch(() => {});
+    }
+    setTimeout(() => { const c = S.chartsInst.dgChart; if (c) c.resize(); }, 30);
+  }
+
+  function dgLimitPct(code) {
+    const c = String(code || '').toLowerCase();
+    if (c.startsWith('sh688') || c.startsWith('sz30')) return 0.20;  // 科创 / 创业
+    if (c.startsWith('bj') || c.startsWith('sh8') || c.startsWith('sz8')) return 0.30;  // 北交所
+    return 0.10;
+  }
+
+  // 关键时点：确认龙什么时候必须盯盘。规则是固定的，状态取自当日盘中快照；
+  // 没有快照就如实显示「未到」，不臆造盘面。竞价明细本地没有，用 09:35 快照近似。
+  function dgWatchPoints(code, it, c) {
+    const lim = dgLimitPct(code) * 100;
+    const stTxt = s => s === 'sealed' ? '封板' : s === 'broken' ? '炸板'
+      : s === 'weak' ? '走弱' : s === 'pending' ? '未表态' : '';
+    const op = c.op, mid = c.mid, cl = c.cl;
+    // 09:35 就已贴涨停 = 一字/秒板，买不到货，不作为竞价买点（与买点条件同一口径）
+    const oneWord = !!(op && op.state === 'sealed' && Number(op.chg) >= lim * 0.9);
+    return [
+      {
+        // 竞价明细本地没有，不能假装有：状态留给 09:35 那行显示
+        t: '09:25', watch: '高开 3–7%，封单递增',
+        bad: '不足 3% 或一字',
+        act: '降级，一字不追',
+        seen: '明细未取',
+        hit: false,
+      },
+      {
+        t: '09:35', watch: '是否快速封板',
+        bad: '低开走弱 / 秒板一字',
+        act: '走弱放弃，一字等回踩',
+        seen: op ? stTxt(op.state) + (oneWord ? '·一字' : '') : '',
+        hit: !!(op && (op.state === 'weak' || oneWord)),
+      },
+      {
+        t: '10:00', watch: '封板是否扎实',
+        bad: '封转炸，炸板不回封',
+        act: '先减半，半小时不回封清',
+        seen: mid ? stTxt(mid.state) : '',
+        hit: !!(mid && mid.state === 'broken'),
+      },
+      {
+        t: '14:45', watch: '是否回封，有无尾盘急拉',
+        bad: '炸板不回封 / 偷袭拉板',
+        act: '不回封次日走，拉板不追',
+        seen: cl ? stTxt(cl.state) : '',
+        hit: !!(mid && cl && mid.state === 'sealed' && cl.state === 'broken'),
+      },
+      {
+        t: '次日', watch: '09:25 竞价高度',
+        bad: '未晋级断板',
+        act: '无条件走',
+        seen: it.advanced === true ? '已晋级' : (it.advanced === false ? '未晋级' : ''),
+        hit: it.advanced === false,
+      },
+    ];
+  }
+
+  // 四支柱页顶部的一行提示：只答「现在该盯什么」，动作与命中细节都留给作战计划 tab。
+  // 异动已触发优先报异动；没有异动就按时钟给下一个待观察时点（仅当日有）。
+  // 文案刻意只留「时点 + 一句话」，塞进动作说明就会换行，一行提示就废了。
+  function dgWatchNext(code, it, c) {
+    if (!it || it.status !== 'confirmed') return null;
+    const rows = dgWatchPoints(code, it, c);
+    const hit = rows.filter(r => r.hit).pop();     // 取最近一个触发的
+    if (hit) return { warn: true, t: hit.t, txt: hit.bad };
+    const d = DG.data || {};
+    const now = new Date();
+    const p2 = n => String(n).padStart(2, '0');
+    const iso = `${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())}`;
+    if ((d.date || '') !== iso) {
+      return { warn: false, t: '', txt: '该日未触发异动' };
+    }
+    const mins = now.getHours() * 60 + now.getMinutes();
+    const plan = [['09:25', 565], ['09:35', 575], ['10:00', 600], ['14:45', 885]];
+    const nx = plan.find(([, m]) => mins < m);
+    const t = nx ? nx[0] : '次日';
+    const row = rows.find(r => r.t === t);
+    if (!row) return null;
+    return { warn: false, t, txt: row.watch };
+  }
+
+  function renderDgWatchBrief(code, it, c) {
+    const box = $('#dgWatchBrief');
+    if (!box) return;
+    const b = dgWatchNext(code, it, c);
+    if (!b) { box.style.display = 'none'; box.innerHTML = ''; return; }
+    box.style.display = '';
+    box.className = 'dg-brief' + (b.warn ? ' warn' : '');
+    box.innerHTML = `<span class="k">${b.warn ? '异动' : (b.t ? '下一个' : '当日')}</span>`
+      + (b.t ? `<b>${he(b.t)}</b>` : '')
+      + `<span class="t">${he(b.txt)}</span>`
+      + `<button class="go" id="dgBriefGo">作战计划 →</button>`;
+    const go = $('#dgBriefGo');
+    if (go) go.onclick = () => setDragonDetailTab('plan');
+  }
+
+  // 作战计划：把上一轮讲的三件事（买点 / 卖点 / 仓位）落到每只票的实际盘面状态上。
+  // 只读本地已落盘数据 + 已缓存的 chart/live，不额外打东财。
+  function renderDgPlan(code, it) {
+    const box = $('#dgPanePlan');
+    if (!box || !it) return;
+    const d = DG.data || {};
+    const sent = d.sentiment || {};
+    const slots = d.intraday || {};
+    const at = slot => {
+      const s = slots[slot];
+      return s ? (s.items || []).find(x => x.code === code) : null;
+    };
+    const op = at('open'), mid = at('mid'), cl = at('close');
+    const ice = !!sent.ice;
+    const hot = !!sent.hot;
+    // 反包：接力矩阵里最新验证日标了 rebound 才算，避免把普通确认龙误标
+    const vd = d.verified_on;
+    const evRow = (DG.evolution && DG.evolution.stocks || []).find(s => s.code === code);
+    const rebound = !!(evRow && vd && evRow.cells && evRow.cells[vd]
+                       && evRow.cells[vd].status === 'rebound');
+    const isConfirm = it.status === 'confirmed';
+
+    // —— 身份与仓位 ——
+    let role, roleCls, pos, posOn;
+    if (ice) {
+      role = '情绪冰点 · 只观察'; roleCls = 'ice'; pos = '0（空仓）'; posOn = false;
+    } else if (!isConfirm && it.status === 'pending') {
+      role = '晋级未确认 · 只观察'; roleCls = 'pending'; pos = '0（分数未过线）'; posOn = false;
+    } else if (!isConfirm && it.status === 'retired') {
+      role = '退位龙 · 只观察'; roleCls = 'retired'; pos = '0（等反包）'; posOn = false;
+    } else if (it.status === 'observe' || d.awaiting_verification) {
+      role = '潜龙 · 待次日验证'; roleCls = 'ice'; pos = '0（等确认）'; posOn = false;
+    } else if (rebound) {
+      role = '反包龙 · 二次上车'; roleCls = 'rebound'; pos = '5–8%（减半）'; posOn = true;
+    } else {
+      role = '确认龙 · 首次介入'; roleCls = ''; pos = hot ? '15–20%（情绪热）' : '10–15%'; posOn = true;
+    }
+    const roleNote = ice ? '冰点档系统已把确认龙降级为只观察，不提示买入'
+      : (posOn ? '单票上限，回封买取上限、竞价试仓取下限' : '仓位为 0，只放进观察池等信号');
+
+    // —— 买点三条件（盘中三时点状态驱动）——
+    const buys = [
+      { tag: '回封买', desc: '10:00 炸板洗盘 → 14:45 重新封死，均价线附近企稳再冲板时进',
+        hit: !!(mid && cl && mid.state === 'broken' && cl.state === 'sealed') },
+      { tag: '竞价买', desc: '09:25 高开 3–7%、量比温和 → 开盘快速上冲时试仓，一字不追',
+        // 09:35 就已接近涨停 = 一字/秒板，买不到货，不作为竞价买点
+        hit: !!(op && op.state === 'sealed' && op.chg != null
+                && Number(op.chg) < dgLimitPct(code) * 100 * 0.9) },
+      { tag: '低吸', desc: '14:45 仍未表态（未走弱）且缩量 → 回踩 MA5 附近小仓接，博次日反包',
+        hit: !!(cl && cl.state === 'pending') },
+    ];
+    // —— 卖出三铁律 ——
+    const sells = [
+      { tag: '未晋级', desc: '次日验证未晋级 → 走，不找理由',
+        hit: it.advanced === false },
+      { tag: '封转炸', desc: '10:00 封板 → 14:45 变炸板、封单减少 → 走',
+        hit: !!(mid && cl && mid.state === 'sealed' && cl.state === 'broken') },
+      { tag: '情绪冰点', desc: '涨跌比 ≤0.35 或涨停 ≤12 家 → 无条件降仓',
+        hit: ice },
+    ];
+    const slotTip = (op || mid || cl)
+      ? '高亮项 = 今日三个时点已命中的条件；未命中项为预备规则'
+      : '今日暂无盘中快照（尚未到 09:35 / 未跑盘中验证），以下为预备规则';
+    // 关键时点只给确认龙：潜龙还没晋级、退位龙只等反包，时点规则不一样，
+    // 硬套会让「该不该盯」变成噪音。
+    const watches = it.status === 'confirmed' ? dgWatchPoints(code, it, { op, mid, cl }) : [];
+    const watchTip = ice ? '情绪冰点：以下时点只观察，不介入'
+      : '琥珀＝已出现异动 · 竞价无明细';
+
+    box.innerHTML = `<div class="dg-plan">
+      <div class="dg-plan-hero">
+        <span class="dg-plan-role ${roleCls}">${he(role)}</span>
+        <span class="hint">${he(roleNote)}</span>
+        <span class="dg-plan-pos">建议仓位 <b class="${posOn ? 'on' : 'off'}">${he(pos)}</b></span>
+      </div>
+      ${watches.length ? `<div class="dg-plan-sec">
+        <h5>关键时点 · 什么时候要盯 <span>${he(watchTip)}</span></h5>
+        ${watches.map(w => `<div class="dg-plan-row ${w.hit ? 'hit warn' : ''}">
+          <span class="dg-plan-tag">${he(w.t)}</span>
+          <span class="dg-plan-desc">${he(w.watch)}；<i class="dg-plan-bad">异动：${he(w.bad)}</i> → <span class="dg-plan-act">${he(w.act)}</span>${
+            w.seen ? `<span class="dg-plan-seen${w.hit ? ' bad' : ''}">· ${he(w.seen)}</span>`
+                   : '<span class="dg-plan-seen">· 未到</span>'}</span></div>`).join('')}
+      </div>` : ''}
+      <div class="dg-plan-sec">
+        <h5>买点条件 <span>${he(slotTip)}</span></h5>
+        ${buys.map(b => `<div class="dg-plan-row ${b.hit ? 'hit' : ''}">
+          <span class="dg-plan-tag">${b.hit ? '✓ ' : ''}${he(b.tag)}</span>
+          <span class="dg-plan-desc">${he(b.desc)}</span></div>`).join('')}
+      </div>
+      <div class="dg-plan-sec">
+        <h5>卖出铁律 <span>命中即执行，不找理由</span></h5>
+        ${sells.map(s => `<div class="dg-plan-row sell ${s.hit ? 'hit' : ''}">
+          <span class="dg-plan-tag">${s.hit ? '! ' : ''}${he(s.tag)}</span>
+          <span class="dg-plan-desc">${he(s.desc)}</span></div>`).join('')}
+      </div>
+      <div class="dg-plan-sec">
+        <h5>价格锚 <span>基于最新快照与日线，仅供挂单参考</span></h5>
+        <div class="dg-plan-anchors" id="dgPlanAnchors">
+          <div class="dg-plan-anchor"><div class="k">昨收</div><div class="v">…</div></div>
+          <div class="dg-plan-anchor buy"><div class="k">涨停挂单价</div><div class="v">…</div></div>
+          <div class="dg-plan-anchor"><div class="k">MA5 低吸参考</div><div class="v">…</div></div>
+          <div class="dg-plan-anchor stop"><div class="k">-5% 硬止损</div><div class="v">…</div></div>
+          <div class="dg-plan-anchor"><div class="k">今日最低</div><div class="v">…</div></div>
+          <div class="dg-plan-anchor"><div class="k">已涨/跌</div><div class="v">…</div></div>
+        </div>
+      </div>
+      <div class="dg-plan-foot">口径：涨停挂单价按当日收盘 ×（1+涨跌幅限制）估算，创业板/科创 20%、北交所 30%、主板 10%；实际以交易所集合竞价结果为准。本卡片是规则映射，不构成买卖建议。</div>
+    </div>`;
+    fillDgAnchors(code, it);
+  }
+
+  // 价格锚统一口径：作战卡六格 + K 线三条水平线共用，避免两处各算一套。
+  // 回溯历史日期时按 K 线里对应日期定位基准，不拿今天的实时价冒充历史日。
+  function dgAnchorOf(code, chart, live, itQuote) {
+    const bars = (chart && chart.bars) || [];
+    const dates = (chart && chart.dates) || [];
+    const d = (DG.data || {}).date || '';
+    const idx = d ? dates.indexOf(d) : -1;
+    const historic = idx >= 0 && idx < dates.length - 1;
+    const barIdx = historic ? idx : bars.length - 1;
+    const useLive = !historic && live && live.price;
+    const q = useLive ? live : (itQuote || {});
+    const prev = Number(q.prev != null ? q.prev : (barIdx >= 1 ? bars[barIdx - 1][1] : NaN));
+    const price = Number(q.price || q.low || (barIdx >= 0 ? bars[barIdx][1] : NaN));
+    const ma5 = barIdx >= 4
+      ? bars.slice(barIdx - 4, barIdx + 1).reduce((s, b) => s + Number(b[1] || 0), 0) / 5 : null;
+    return {
+      prev, price, ma5,
+      low: Number(q.low),
+      chg: (q.chg != null && Number.isFinite(Number(q.chg))) ? Number(q.chg) : null,
+      limitPct: dgLimitPct(code),
+      lim: Number.isFinite(price) ? price * (1 + dgLimitPct(code)) : null,
+      stop: Number.isFinite(price) ? price * 0.95 : null,
+      historic, barDate: barIdx >= 0 ? dates[barIdx] : '',
+    };
+  }
+
+  async function fillDgAnchors(code, it) {
+    const host = $('#dgPlanAnchors');
+    if (!host) return;
+    const [chart, live] = await Promise.all([chartOf(code), liveOf(code)]);
+    if (!host.isConnected || DG.code !== code) return;   // 已切走，丢弃过期结果
+    const a = dgAnchorOf(code, chart, live, it.quote);
+    const fmtP = v => (v == null || !Number.isFinite(v)) ? '—' : v.toFixed(2);
+    const vals = [
+      fmtP(a.prev), fmtP(a.lim), fmtP(a.ma5),
+      fmtP(a.stop), fmtP(a.low), a.chg != null ? dgNum(a.chg, 1) + '%' : '—',
+    ];
+    host.querySelectorAll('.v').forEach((el, i) => { el.textContent = vals[i] ?? '—'; });
+    const tip = host.parentElement && host.parentElement.querySelector('h5 span');
+    if (tip) tip.textContent = a.historic
+      ? `回溯口径：基准取 ${a.barDate} 收盘，非今日实时价`
+      : '基于最新快照与日线，仅供挂单参考';
+  }
+
+  // 全局 AI 悬浮面板：异动 / 持仓 / 擒龙等模块共用同一入口。
+  // 各模块选中标的时只调 setAiContext 更新上下文，不产生任何 AI 请求；
+  // 点右下角图标才 openAiFloat → 取数 + 解读 + 对话。
+  function setAiContext(row, kind = 'stock', silent = false) {
+    if (!row || !row.code) return;
+    // 关注页等模块会定时重绘，同一只票重复同步不要重开面板，否则会冲掉正在输入的追问
+    const same = AI.row && AI.row.code === row.code && AI.kind === kind && !!AI.brief;
+    AI.kind = kind;
+    // 同一只票只更新 row 引用，不重置对话；换票则清掉上一只的 brief / 流
+    if (AI.code !== row.code) {
+      if (AI.ctrl) { try { AI.ctrl.abort(); } catch (_) {} AI.ctrl = null; }
+      AI.code = row.code; AI.brief = null; AI.msgs = []; AI.busy = false;
+    }
+    AI.row = row;
+    if (!silent && !same) refreshAiFloat();  // 面板开着就跟随切标的；关着则什么都不做
+  }
+  // 兜底：从当前右侧详情反推标的，避免个别渲染路径漏调 setAiContext 时出现
+  // 「右侧有票、AI 却说请先选择」的错位。优先用模块已维护的当前标的变量。
+  function syncAiFromRightPanel() {
+    if (AI.row && AI.row.code) return;
+    if (current === 'focus' && S.focusCode) {
+      const code = S.focusCode;
+      const meta = [...(S.watch || []), ...(S.holdings || []),
+                    ...((S.sectorMembers || {}).members || [])].find(x => x.code === code) || {};
+      setAiContext({ code, name: meta.name || code, sector: meta.sector || (S.sectorMembers || {}).name,
+                     stage: meta.stage, sub: meta.sub }, 'stock', true);
+    } else if (current === 'moves' && MVS.code) {
+      const src = (MVS.data && MVS.data.rows) || (MVS.data && MVS.data.items) || [];
+      const r = src.find(x => x.code === MVS.code);
+      if (r) setAiContext(r, 'stock', true);
+    }
+  }
+  function refreshAiFloat() {
+    const host = $('#aiFloatHost'), panel = $('#aiFloatPanel');
+    if (!host || !panel || !panel.classList.contains('open')) return;
+    const row = AI.row;
+    const scope = $('#aiFloatScope');
+    if (scope) scope.textContent = row ? `${AI.kind === 'hold' ? '持仓 · ' : ''}${row.name} ${row.code}` : '';
+    if (!row) { host.innerHTML = '<div class="empty">请先点击列表中的一只标的，右侧显示详情后 AI 会自动跟随</div>'; return; }
+    renderAI(row, false, '#aiFloatHost').then(() => {
+      if (AI.code === row.code) { AI.open = true; expandAI(); }
+    });
+  }
+  function openAiFloat() {
+    const panel = $('#aiFloatPanel');
+    if (!panel) return;
+    panel.classList.add('open');
+    syncAiFromRightPanel();                  // 右侧已有标的就直接用，不必再让用户去列表点一次
+    refreshAiFloat();
+  }
+  function closeAiFloat() {
+    const panel = $('#aiFloatPanel');
+    if (panel) { panel.classList.remove('open', 'fullscreen'); syncAiFloatFullBtn(); }
+  }
+  // AI 浮层全屏：复用图表全屏思路（页面内铺满），按钮 / 双击标题 / Esc 均可切换
+  function syncAiFloatFullBtn() {
+    const b = $('#aiFloatFull'), p = $('#aiFloatPanel');
+    if (!b || !p) return;
+    const full = p.classList.contains('fullscreen');
+    b.textContent = full ? '⤡' : '⤢';
+    b.title = full ? '退出全屏' : '全屏查看';
+    b.setAttribute('aria-label', b.title);
+  }
+  function toggleAiFloatFull() {
+    const p = $('#aiFloatPanel');
+    if (!p || !p.classList.contains('open')) return;
+    p.classList.toggle('fullscreen');
+    syncAiFloatFullBtn();
+  }
+
+  // 全局 AI 悬浮入口绑定：与任何 tab 无关，页面启动即生效
+  function initAiFloat() {
+    const fab = $('#aiFab');
+    if (fab) fab.addEventListener('click', () => {
+      const p = $('#aiFloatPanel');
+      if (p && p.classList.contains('open')) closeAiFloat(); else openAiFloat();
+    });
+    const fc = $('#aiFloatClose');
+    if (fc) fc.addEventListener('click', closeAiFloat);
+    const ff = $('#aiFloatFull');
+    if (ff) ff.addEventListener('click', toggleAiFloatFull);
+    const fhead = $('#aiFloatPanel .ai-float-head');
+    if (fhead) fhead.addEventListener('dblclick', e => {
+      if (e.target.closest('button')) return;
+      toggleAiFloatFull();
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        const p = $('#aiFloatPanel');
+        if (p && p.classList.contains('open')) {
+          if (p.classList.contains('fullscreen')) toggleAiFloatFull(); // 先退出全屏，再按一次才收起
+          else closeAiFloat();
+        }
+      }
+    });
+  }
+
   function initDragonTab() {
     $$('#dgLanes button').forEach(b => b.addEventListener('click', () => {
       DG.lane = b.dataset.dglane;
+      // 记住「这一天我上次看的是哪档」，来回切日期时各自恢复，互不干扰
+      const day = (DG.data || {}).date;
+      if (day) DG.laneByDate[day] = DG.lane;
       $$('#dgLanes button').forEach(x => x.classList.toggle('active', x === b));
       renderDragonTable();
     }));
+    // 左栏视角切换：龙头列表 / 接力矩阵。右栏详情常驻，不再跟着切视图。
+    $$('#dgLeftViews button').forEach(b => b.addEventListener('click', () => setDragonLeftView(b.dataset.dgview)));
+    // 右栏详情 tab：四支柱 / 作战计划（K 线图在 tab 外常驻）
+    $$('#dgDetailTabs button').forEach(b => b.addEventListener('click', () => setDragonDetailTab(b.dataset.dgtab)));
     const rb = $('#dgRunDaily');
     if (rb) rb.addEventListener('click', async () => {
       rb.disabled = true; const old = rb.textContent; rb.textContent = '运行中…';
@@ -7948,32 +9187,48 @@
       catch (e) { toast('刷新失败：' + (e.message || '未知错误')); }
       finally { rf.disabled = false; rf.textContent = old; }
     });
-    // 个股详情：切到「异动」tab 并复用其完整详情（基本信息 / 基本面 / 研报 / AI 解读）。
-    // 注意：不能依赖异动池查找目标股——擒龙标的常不在异动池里，且 renderMovesTab 会
-    // 默认打开异动池第一行（比如汇洲智能），造成「选了克来机电却打开汇洲智能」。
-    // 做法：先把 MVS.code 设为目标（让默认选中逻辑失效），再用擒龙当前 item 直接喂详情。
+    // 完整档案：不再跳到异动页，直接弹窗显示基本信息 / 财务 / 研报。
+    // AI 解读与追问在全局悬浮窗，弹窗只放档案，避免同一时刻两份 AI DOM 抢 id。
     const fi = $('#dgFullInfo');
     if (fi) fi.addEventListener('click', async () => {
       if (!DG.code) { toast('请先在左侧选中一只标的', true); return; }
       const code = DG.code;
-      // 从擒龙三档里取当前标的（含 name/industry/stage 等，足够 showMoveDetail 用）
-      const d = DG.data || {};
-      const it = [].concat(d.confirmed || [], d.retired || [], d.observing || [])
-        .find(x => x.code === code);
-      const row = it ? {
-        code: it.code, name: it.name || it.code, industry: it.industry,
-        stage: it.stage, sub: it.sub, pivot: it.pivot, stop: it.stop,
-        price: (it.quote || {}).price, chg: (it.quote || {}).chg,
-        fromDragon: true,
-      } : { code, name: code, fromDragon: true };
-      MVS.code = code;                       // 关键：先占位，阻止默认选中第一行
-      switchTab('moves');
-      await renderMovesTab(false);
-      showMoveDetail(row);                   // 用目标股覆盖，确保详情就是刚选的标的
-      markSelected('#mvTable', code);        // 若在异动池内则高亮，否则无行可高亮（无害）
+      const it = DG.currentItem || {};
+      const q = it.quote || {};
+      const nm = it.name || code;
+      const chgTxt = (q.chg !== null && q.chg !== undefined) ? dgNum(q.chg) + '%' : '—';
+      const desc = `现价 ${dgNum(q.price)} · 涨幅 ${chgTxt} · 连板 ${it.now_lbc ?? it.prev_lbc ?? '—'}`
+        + ` · ${it.industry || '—'} · ${it.stage || '—'}`;
+      const brief = (AI.code === code && AI.brief) ? AI.brief : null;
+      const aiLine = brief
+        ? `<div class="icard ai-card"><h5>AI 结论 <span class="cnt">${he(brief.headline || '')}</span></h5></div>`
+        : `<div class="hint">AI 解读与追问在右下角悬浮按钮里，关闭弹窗即可打开。</div>`;
+      const html = aiLine
+        + `<div id="dgProfileInfo" class="icard"><h5>基本信息</h5><div class="loading">加载中<span class="dot">●</span></div></div>`
+        + `<div id="dgProfileResearch"></div>`;
+      modalHtml({ title: `${nm}（${code}）· 完整档案`, desc, html, okText: '关闭', wide: true })
+        .then(() => {
+          const c = $('#modalCancel'); if (c) c.style.display = '';
+          clearInterval(RES_TIMERS.dragon);   // 弹窗关掉就别再往隐藏 DOM 写档案
+        });
+      const cancel = $('#modalCancel');
+      if (cancel) cancel.style.display = 'none';
+      // 与关注页 / 持仓页同一套页面：信息卡 + 六章深度研究档案（主营业务、估值三档等）
+      renderResearch(code, '#dgProfileResearch', 'dragon');
+      try {
+        const prof = await loadProfile(code);
+        const host = $('#dgProfileInfo');
+        if (!host) return;                    // 弹窗已关，丢弃过期结果
+        const h = { code, name: nm, sector: it.industry || '', stage: it.stage || '', sub: it.sub || '' };
+        host.innerHTML = infoBasicCard(prof, h) + infoFinanceCard(prof) + infoReportCard(prof);
+      } catch (e) {
+        const host = $('#dgProfileInfo');
+        if (host) host.innerHTML = `<div class="empty">档案加载失败：${he(e.message || '未知错误')}</div>`;
+      }
     });
   }
   initDragonTab();
+  initAiFloat();
 
   // ================= 交互 =================
   let current = 'market';
@@ -8283,7 +9538,10 @@
           switchTab('focus');
           renderFocusTab(true);
         }, 120);
-      } else if (['market', 'sector', 'focus', 'moves', 'holdings', 'news'].includes(q)) {
+      } else if (['market', 'sector', 'focus', 'moves', 'holdings', 'news', 'dragon'].includes(q)) {
+        // /?tab=dragon&date=2026-11-26 直达某个池子日（分享 / 验证用）
+        const dgDay = q === 'dragon' ? params.get('date') : null;
+        if (dgDay) DG.date = dgDay;
         setTimeout(() => switchTab(q), 60);
       }
       // 分享 / 验证钩子：?gs=康冠 直接展开全局搜索；?lsq=sectorTable:半导体 预填某列表搜索

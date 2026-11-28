@@ -45,7 +45,9 @@ MAP_FILE = os.path.join(RAW, "sector_bk_map.json")
 MAP_FALLBACK = os.path.join(DEFAULT_DATA_DIR, "raw", "sector_bk_map.json")
 LOG_DIR = os.path.join(DATA_DIR, "logs")
 
-RATIO_LIMIT = 3.0       # 段间中位数超过 3 倍视为量纲断层
+RATIO_LIMIT = 3.0       # 段间中位数超过 3 倍视为量纲断层（仅看窗口，用于「无跳空」的缓变断层）
+SEG_RATIO = 1.5         # 切段后判定「哪一段是另一种量纲」的阈值，低于此视为同口径
+SEG_LOCAL = 30          # 计算段的量纲代表值时取的局部根数（贴近断层的那一端）
 WINDOW = 10             # 判断跳变点用的前后窗口长度
 FETCH_LIMIT = 500       # 东财重抓根数
 STREAK_LIMIT = 5        # 连续失败 N 个即暂停抓数，改用剔除兜底
@@ -75,17 +77,80 @@ def _median(vals: list[float]) -> float:
     return statistics.median(vals) if vals else 0.0
 
 
+def _gap_days(a: dict, b: dict) -> int:
+    """相邻两根之间的自然日间隔；解析失败返回一个大数（让跳空判据失效，宁漏不错）。"""
+    try:
+        d1 = datetime.strptime(str(a.get("date"))[:10], "%Y-%m-%d")
+        d2 = datetime.strptime(str(b.get("date"))[:10], "%Y-%m-%d")
+        return (d2 - d1).days
+    except Exception:
+        return 999
+
+
+GAP_LIMIT = 0.25        # 单日开盘偏离前收超过该比例即视为量纲断层（指数无除权）
+MIN_BASE_SEG = 3        # 末段至少这么多根才敢拿它当量纲基准
+
+
+def _gap_hit(nodes: list[dict], i: int, limit: float = GAP_LIMIT) -> bool:
+    """第 i 根相对前一根是否发生「不可能自然出现」的跳空。
+
+    板块指数没有除权，单日开盘偏离前收 25% 以上只可能是两套量纲硬拼。
+    中间断档多日（假期/漏抓）时累计涨幅合法地超 25%，不算——所以要求间隔 ≤5 天。
+    """
+    if i <= 0 or i >= len(nodes):
+        return False
+    prev_close = float(nodes[i - 1].get("close") or 0)
+    cur_open = float(nodes[i].get("open") or 0)
+    if prev_close <= 0 or cur_open <= 0:
+        return False
+    if _gap_days(nodes[i - 1], nodes[i]) > 5:
+        return False
+    gap = cur_open / prev_close
+    return gap > 1 + limit or gap < 1 - limit
+
+
 def find_jumps(nodes: list[dict], ratio: float = RATIO_LIMIT,
                window: int = WINDOW) -> list[int]:
-    """返回量纲跳变点的下标（跳变发生在该下标与前一个下标之间）。"""
+    """返回量纲跳变点的下标（跳变发生在该下标与前一个下标之间）。
+
+    两条判据取并集，因为单靠哪一种都会漏：
+
+    A) 隔夜跳空：open/前收 偏离 >25%。板块指数没有除权的概念，单日跳空
+       25% 以上在真实行情里不可能出现，只可能是两套量纲硬拼在一起。
+       这条判据精确，且不受窗口稀释影响。
+
+    B) 前后窗口中位数比 >ratio。用于断层不是「一刀切」而是几天内过渡的
+       情况。注意它对窗口敏感：2026-11-27 的「元件」真实跳空 3.23 倍，
+       用 10 日窗口中位数只有 2.93 倍，卡在 3.0 阈值下漏检——所以不能
+       只靠这一条，也不宜把阈值往下调（连续暴涨的板块会被误判）。
+    """
     closes = [float(b.get("close") or 0) for b in nodes]
     out = []
     for i in range(1, len(nodes)):
+        # 只在两日相邻时用跳空判据：中间断档多日（假期/接口漏抓）时累计涨幅
+        # 合法地超过 25%，用 open/前收 会误判成断层。
+        if _gap_hit(nodes, i):
+            out.append(i)
+            continue
         prev = _median([x for x in closes[max(0, i - window):i] if x > 0])
         nxt = _median([x for x in closes[i:i + window] if x > 0])
         if prev > 0 and nxt > 0 and (prev / nxt > ratio or nxt / prev > ratio):
             out.append(i)
     return out
+
+
+def _seg_rep(nodes: list[dict], seg: list[int]) -> float:
+    """段的量纲代表值：取段末尾贴近断层的局部中位数，而不是整段中位数。
+
+    整段中位数会被长期趋势稀释：pt01801115 的段跨 2024-10 ~ 2026-11，
+    整段中位约 3500，而断层前实际在 4900、断层后 3000，整段比只有 1.17，
+    远低于阈值 —— 明明断得很干净却漏检。取尾部 30 根就得到 1.6 倍。
+    """
+    if not seg:
+        return 0.0
+    tail = seg[-SEG_LOCAL:]
+    return _median([float(nodes[i].get("close") or 0) for i in tail
+                    if (nodes[i].get("close") or 0) > 0])
 
 
 def outlier_indexes(nodes: list[dict], ratio: float = RATIO_LIMIT,
@@ -96,17 +161,42 @@ def outlier_indexes(nodes: list[dict], ratio: float = RATIO_LIMIT,
         return []
     bounds = [0] + jumps + [len(nodes)]
     segs = [list(range(bounds[k], bounds[k + 1])) for k in range(len(bounds) - 1)]
-    seg_med = [_median([float(nodes[i].get("close") or 0)
-                        for i in seg if (nodes[i].get("close") or 0) > 0]) for seg in segs]
-    # 以最长段的量纲为基准；与其相差 3 倍以上的段都是污染
-    base_i = max(range(len(segs)), key=lambda k: len(segs[k]))
+    seg_med = [_seg_rep(nodes, seg) for seg in segs]
+    # 以「最后一段」的量纲为基准，而不是最长段。
+    #
+    # 每日增量都由权威源（东财 clist/kline）写到末端，历史长段才是可能被旧快照
+    # 污染的少数派。原来看最长段，在「长历史 + 短新增」时会把结论判反：2026-11-27
+    # 的元件是 314 根旧口径 + 10 根东财真值，取最长段就变成「保护错的、剔除对的」。
+    # 末段太短时（刚发生过一次断层、新口径还没长出来）退回最长段，避免误判。
+    if len(segs[-1]) >= MIN_BASE_SEG:
+        base_i = len(segs) - 1
+    else:
+        base_i = max(range(len(segs)), key=lambda k: len(segs[k]))
     base = seg_med[base_i]
     if base <= 0:
         return []
+    # 硬断点（隔夜跳空 >25%）是断层本身的直接证据，不需要再用量级比确认哪一段
+    # 是异口径：断点两侧必然不同源。此时以末段为基准，把最后一个硬断点之前的
+    # 历史全部标为污染。
+    #
+    # 为什么必须单独处理：养殖业等 14 个板块 11-11→11-12 跳空 30%，前段 308 根
+    # 是旧口径（东财真值 3772，本地存 2894），但段代表值 3535/2894 只有 1.22 倍，
+    # 低于 SEG_RATIO=1.5 —— 于是「跳变点已确认、段归并又放过」，图上照样断成两截。
+    # 量级比只适合判断缓变断层，扛不住口径差 20%~50% 这种「半对半错」的情况。
+    if base_i == len(segs) - 1:
+        hard = [j for j in jumps if _gap_hit(nodes, j)]
+        if hard:
+            cut = max(hard)
+            rest = [j for j in jumps if j > cut]
+            if not rest:
+                return list(range(cut))
     bad = []
     for k, seg in enumerate(segs):
         m = seg_med[k]
-        if m > 0 and (m / base > ratio or base / m > ratio):
+        # 归并用 SEG_RATIO 而不是 RATIO_LIMIT：跳空判据已在 find_jumps 里确认过
+        # 断层存在，这里只负责判断「哪一段是另一种口径」，不需要再要求 3 倍。
+        # 元件段比 2.32、pt01801096 段比 2.75 —— 用 3.0 会把它们全放过（漏检）。
+        if m > 0 and (m / base > SEG_RATIO or base / m > SEG_RATIO):
             bad.extend(seg)
     return bad
 
@@ -126,6 +216,9 @@ def main(argv=None) -> int:
     ap.add_argument("--window", type=int, default=WINDOW)
     ap.add_argument("--limit", type=int, default=FETCH_LIMIT)
     ap.add_argument("--only", default="", help="只处理逗号分隔的板块代码")
+    ap.add_argument("--rebuild", action="store_true",
+                    help="跳过断层检测，对 --only 指定的板块直接用东财重抓覆盖"
+                         "（用于「剔除后只剩个位数根」的板块补回历史）")
     args = ap.parse_args(argv)
 
     os.makedirs(LOG_DIR, exist_ok=True)
@@ -140,6 +233,10 @@ def main(argv=None) -> int:
     polluted = []
     for c in pts:
         nodes = _nodes_of(raw[c])
+        if args.rebuild:
+            # 强制重建：整个序列都视为待覆盖，用东财权威源重抓
+            polluted.append((c, list(range(len(nodes)))))
+            continue
         bad = outlier_indexes(nodes, args.ratio, args.window)
         if bad:
             polluted.append((c, bad))
@@ -175,6 +272,11 @@ def main(argv=None) -> int:
                        if d not in bad_dates or d in fresh_dates]
             how = f"东财 {bk} 重抓 {len(fresh)} 根回填"
         else:
+            if args.rebuild:
+                # 重建模式下抓不到就什么都别做：此时「剔除」等于把整段历史删光
+                log(f"   [{i}/{len(polluted)}] {pt}←{bk} 东财不可用，跳过（不剔除历史）", fh)
+                failed += 1
+                continue
             if bk:
                 streak += 1
                 why = (sectorflow._MEM.get("last_kline_error") or "").strip()

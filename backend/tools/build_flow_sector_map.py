@@ -118,13 +118,30 @@ REQUEST_GAP = 0.3              # 每个请求后强制间隔，配合 sectorflow
 
 
 def _load_prev_members() -> tuple[dict, dict]:
-    """读上次成员快照及其时间戳，作为增量复用的基础。"""
+    """读上次成员快照及其时间戳，作为增量复用的基础。
+
+    老版本写出的快照只有 ``generated_at``、没有逐 BK 的 ``bk_fetched_at``。
+    这时若返回空 stamps，每个 BK 都会算出 age=999 天判定过期，首次运行就把
+    496 个行业全量重抓（1000+ 次 clist），正是要压掉的突发。所以退化成用
+    整体生成时间兜底 —— 它们本来就是同一批抓的，误差在分钟级。
+    """
     prev, stamps = {}, {}
     if os.path.exists(MEM_FILE):
         try:
             d = json.load(open(MEM_FILE, encoding="utf-8"))
             prev = d.get("members") or {}
             stamps = d.get("bk_fetched_at") or {}
+            if prev and not stamps:
+                from datetime import datetime
+                g = d.get("generated_at")
+                ts = None
+                if isinstance(g, str):
+                    try:
+                        ts = datetime.fromisoformat(g).timestamp()
+                    except ValueError:
+                        ts = None
+                if ts:
+                    stamps = {bk: ts for bk in prev}
         except Exception:
             pass
     return prev, stamps
@@ -137,7 +154,10 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv or [])
 
     rows = ranking()["rows"]
-    prev, stamps = ({}, {} if a.force else _load_prev_members())
+    # 注意括号范围：老写法 `({}, {} if a.force else _load_prev_members())` 在非
+    # force 时把整个右值当成二元组，stamps 拿到 (prev, stamps) 元组，紧接着
+    # 的 stamps.get 必抛 AttributeError —— 这个周任务于是每次非强制运行都失败。
+    prev, stamps = ({}, {}) if a.force else _load_prev_members()
     now = time.time()
 
     # 决定哪些 BK 需要真抓：无快照 / 快照过期 / 上次为空 / 本次不在快照里

@@ -6,8 +6,9 @@
     闸门一（宽进）：当日涨停 / 触板 / 首板 / 炸板全收进潜龙池，只挂标签，
                    不设胜率门槛、不淘汰。宁可错收一千，不可漏掉一条。
     闸门二（严出）：用**次日真实走势**当裁判——是否晋级、封板质量、题材
-                   带动、资金承接，四支柱打分确认谁是真龙；掉队的降级为
-                   「退位龙」保留观察（反包二波还在池子里），不删。
+                   带动、资金承接，四支柱打分确认谁是真龙；晋级但分数不够的挂
+                  「晋级未确认」单独观察，真掉队的才降级为「退位龙」保留观察
+                  （反包二波还在池子里），不删。
 
   这样「首板看着弱」的真龙不会因为闸门一被筛掉，而是在闸门二被重新捞出来。
 
@@ -221,6 +222,15 @@ def build_pool(date: str, verbose: bool = False) -> dict:
             "pre_score": None,           # 闸门一不打分，避免胜率优先漏龙
         })
 
+    # 监管异动额度：连板能走多高，一半看情绪一半看交易所的异动条款。
+    # 这里在建池时算一次并落盘（约 3~6 秒，只补缺失的票），API 直接读，不联网。
+    try:
+        from engines import regwatch
+        regwatch.annotate(items, date, verbose=verbose)
+    except Exception as e:
+        if verbose:
+            print(f"[擒龙·闸门一] 监管异动计算跳过：{e}")
+
     out = {
         "date": date,
         "built_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -233,8 +243,11 @@ def build_pool(date: str, verbose: bool = False) -> dict:
     }
     _dump(_path("pool", date), out)
     if verbose:
+        from engines import regwatch as _rw
+        st = _rw.stats(items)
         print(f"[擒龙·闸门一] {date}: 潜龙 {len(items)} 只 · 情绪 {sent['regime']} "
-              f"· 涨停池 {len(zt)} / 异动涨停 {sum(1 for i in items if i['source'] == 'screener_limit')}")
+              f"· 涨停池 {len(zt)} / 异动涨停 {sum(1 for i in items if i['source'] == 'screener_limit')}"
+              f" · 监管 严重{st['severe']}/异动{st['alert'] + st['warn']}/临界{st['near']}")
     return out
 
 
@@ -243,9 +256,16 @@ def score_one(item: dict, *, zt_today: dict | None = None,
               theme_limits: dict | None = None,
               sector_rank: list | None = None,
               dragon: dict | None = None,
-              flow: dict | None = None) -> dict:
-    """四支柱打分，每项 0-25，总分 100。所有输入缺失都给中性分、不臆造。"""
-    lbc = int(_num(item.get("lbc")) or 0)
+              flow: dict | None = None,
+              effective_lbc: int | None = None) -> dict:
+    """四支柱打分，每项 0-25，总分 100。所有输入缺失都给中性分、不臆造。
+
+    effective_lbc：闸门二验证时传入「验证日高度」——晋级了就按晋级后的连板数
+    算高度分，没晋级则保留池子日高度。此前固定用池子日 lbc，导致晋级股
+    高度被系统性低估（如 3→4 板仍按 3 板给 18 分，差 4 分卡在 68 门槛）。
+    """
+    raw_lbc = int(_num(item.get("lbc")) or 0)
+    lbc = int(effective_lbc) if effective_lbc is not None else raw_lbc
     zbc = int(_num(item.get("zbc")) or 0)
     fbt = _fbt_min(item.get("fbt"))
     quote = item.get("quote") or {}
@@ -253,21 +273,36 @@ def score_one(item: dict, *, zt_today: dict | None = None,
     amount = _num(quote.get("amount"))          # 万元
     turnover = _num(quote.get("turnover"))
     reasons: list[str] = []
+    # 逐项计分明细：每根柱子由哪几个小项加出来、各得几分、该项上限多少。
+    # 前端鼠标停在柱子上就按这个渲染公式（"连板 3 板 → 18 分 / 题材空间板 +3"），
+    # 不用再让用户拿一句笼统的规则自己套。max 是「该项在天花板里占多少分」，
+    # 不是「本项可得上限」——两者不一致时（如驱动项封顶 22）前端会单独标出。
+    detail: dict[str, list[dict]] = {"height": [], "strength": [], "drive": [], "money": []}
 
     # --- 高度（连板数 + 是否题材空间板）---
-    height = {0: 3, 1: 7, 2: 13, 3: 18, 4: 22}.get(lbc, 25 if lbc >= 5 else 3)
+    height_base = {0: 3, 1: 7, 2: 13, 3: 18, 4: 22}.get(lbc, 25 if lbc >= 5 else 3)
+    height = height_base
+    detail["height"].append({"name": f"连板 {lbc} 板", "pts": height_base, "max": 25})
     if lbc >= 3:
         reasons.append(f"{lbc} 连板，进入高位梯队")
     theme = item.get("hybk") or item.get("industry")
     tl = theme_limits or {}
     if theme and lbc and lbc >= tl.get(theme, 0) and tl.get(theme, 0) >= 2:
+        before = height
         height = min(25, height + 3)
+        detail["height"].append({
+            "name": f"「{theme}」题材空间板（题材内最高 {tl.get(theme, 0)} 板）",
+            "pts": height - before, "max": 3,
+            "note": "已满 25 封顶" if height == before else ""})
         reasons.append(f"「{theme}」题材空间板")
+    elif lbc >= 5:
+        detail["height"].append({"name": "≥5 板已封顶", "pts": 0, "max": 3})
 
     # --- 强度（首封早 / 炸板少 / 封单占成交比）---
     strength = 0
     if fbt is not None:
-        strength += 9 if fbt <= 9.58 else (6 if fbt <= 10.0 else (4 if fbt <= 10.5 else 2))
+        s_pts = 9 if fbt <= 9.58 else (6 if fbt <= 10.0 else (4 if fbt <= 10.5 else 2))
+        strength += s_pts
         if fbt <= 10.0:
             # fbt 是东财 HHMMSS 整数（如 92500 = 09:25:00，集合竞价一字板；
             # 93000 = 09:30:00 开盘即封）。直接把原始数字塞进文案用户看不懂，
@@ -277,9 +312,17 @@ def score_one(item: dict, *, zt_today: dict | None = None,
             hhmmss = f"{s[0:2]}:{s[2:4]}:{s[4:6]}"
             note = "（集合竞价即封）" if s <= "093000" else "（开盘后快速封板）"
             reasons.append(f"首封 {hhmmss} 较早{note}")
+            detail["strength"].append({"name": f"首封 {hhmmss}{note}",
+                                       "pts": s_pts, "max": 9})
+        else:
+            detail["strength"].append({"name": f"首封 {fbt:.2f} 时（晚于 10:00）",
+                                       "pts": s_pts, "max": 9})
     else:
         strength += 4
-    strength += 9 if zbc == 0 else (5 if zbc == 1 else (2 if zbc == 2 else 0))
+        detail["strength"].append({"name": "无首封时间（给中性分）", "pts": 4, "max": 9})
+    z_pts = 9 if zbc == 0 else (5 if zbc == 1 else (2 if zbc == 2 else 0))
+    strength += z_pts
+    detail["strength"].append({"name": f"炸板 {zbc} 次", "pts": z_pts, "max": 9})
     if zbc == 0:
         reasons.append("全天零炸板，封板质量高")
     elif zbc >= 3:
@@ -287,15 +330,22 @@ def score_one(item: dict, *, zt_today: dict | None = None,
     seal_ratio = (fund / 10000 / amount) if (fund and amount and amount > 0) else None
     if seal_ratio is None:
         strength += 3
+        detail["strength"].append({"name": "无成交额（封单占比给中性分）", "pts": 3, "max": 7})
     else:
-        strength += 7 if seal_ratio >= 0.10 else (5 if seal_ratio >= 0.05 else
-                     (3 if seal_ratio >= 0.02 else 1))
+        seal_pts = (7 if seal_ratio >= 0.10 else (5 if seal_ratio >= 0.05 else
+                    (3 if seal_ratio >= 0.02 else 1)))
+        strength += seal_pts
+        detail["strength"].append({"name": f"封单占成交 {seal_ratio * 100:.1f}%",
+                                   "pts": seal_pts, "max": 7})
 
     # --- 带动（同题材涨停家数 + 板块资金排名）---
     drive = 0
     n_limit = int(tl.get(theme) or 0) if theme else 0
-    drive += 12 if n_limit >= 5 else (9 if n_limit >= 3 else (6 if n_limit >= 2 else
-              (3 if n_limit >= 1 else 2)))
+    d_pts = (12 if n_limit >= 5 else (9 if n_limit >= 3 else (6 if n_limit >= 2 else
+             (3 if n_limit >= 1 else 2))))
+    drive += d_pts
+    detail["drive"].append({"name": f"同题材「{theme or '未分类'}」涨停 {n_limit} 只",
+                            "pts": d_pts, "max": 12})
     if n_limit >= 3:
         # 名单由 verify_day 通过 theme_peers 注入，前端会把同题材个股渲染成可点击列表。
         # 这里只写结论句，避免把整串股票名塞进文字理由里。
@@ -306,45 +356,72 @@ def score_one(item: dict, *, zt_today: dict | None = None,
     main_net = _num(rank.get("zljlr")) if rank else None
     if main_net is None:
         drive += 3
+        detail["drive"].append({"name": "板块主力资金查无（给中性分）", "pts": 3, "max": 6})
     elif main_net > 0:
         drive += 6
+        detail["drive"].append({"name": f"板块主力净流入 {main_net / 1e8:.2f} 亿",
+                                "pts": 6, "max": 6})
         reasons.append("所属板块主力净流入为正")
     else:
         drive += 1
+        detail["drive"].append({"name": f"板块主力净流出 {abs(main_net) / 1e8:.2f} 亿",
+                                "pts": 1, "max": 6})
     # 板块资金排名靠前加分
     if rank and isinstance(rank.get("_rank"), int) and rank["_rank"] <= 10:
         drive += 4
+        detail["drive"].append({"name": f"板块资金排名 第 {rank['_rank']} 名（前 10）",
+                                "pts": 4, "max": 4})
 
     # --- 资金（龙虎榜净买 + 主力净流入 + 换手健康度）---
     money = 0
     net_buy = _num((dragon or {}).get("net_buy"))
     if (dragon or {}).get("on_board"):
-        money += 10 if (net_buy or 0) > 0 else 3
         if (net_buy or 0) > 0:
+            money += 10
+            detail["money"].append({"name": f"龙虎榜净买 {net_buy / 1e4:.0f} 万",
+                                    "pts": 10, "max": 10})
             reasons.append(f"龙虎榜净买 {(net_buy / 1e4):.0f} 万")
+        else:
+            money += 3
+            detail["money"].append({"name": f"龙虎榜上榜但净卖 {abs(net_buy or 0) / 1e4:.0f} 万",
+                                    "pts": 3, "max": 10})
     else:
         money += 4
+        detail["money"].append({"name": "未上龙虎榜", "pts": 4, "max": 10})
     mnet = _num((flow or {}).get("main_net"))
     if mnet is None:
         money += 3
+        detail["money"].append({"name": "个股主力资金查无（给中性分）", "pts": 3, "max": 8})
     elif mnet > 0:
         money += 8
+        detail["money"].append({"name": f"个股主力净流入 {mnet / 1e8:.2f} 亿",
+                                "pts": 8, "max": 8})
     else:
         money += 2
+        detail["money"].append({"name": f"个股主力净流出 {abs(mnet) / 1e8:.2f} 亿",
+                                "pts": 2, "max": 8})
     if turnover is None:
         money += 3
+        detail["money"].append({"name": "换手率查无（给中性分）", "pts": 3, "max": 7})
     elif 3 <= turnover <= 25:
         money += 7
+        detail["money"].append({"name": f"换手 {turnover:.1f}%（3–25% 健康）",
+                                "pts": 7, "max": 7})
     elif turnover > 35:
         money += 3
+        detail["money"].append({"name": f"换手 {turnover:.1f}%（>35% 偏高）",
+                                "pts": 3, "max": 7})
         reasons.append(f"换手 {turnover:.0f}% 偏高，接力盘不稳")
     else:
         money += 4
+        detail["money"].append({"name": f"换手 {turnover:.1f}%（3–25% 之外）",
+                                "pts": 4, "max": 7})
 
     parts = {"height": height, "strength": strength,
              "drive": drive, "money": money}
     total = sum(parts.values())
     return {"parts": parts, "total": total, "reasons": reasons[:6],
+            "detail": detail,
             "metrics": {"lbc": lbc, "zbc": zbc, "fbt": item.get("fbt"),
                         "seal_ratio": round(seal_ratio, 3) if seal_ratio else None,
                         "theme_limits": n_limit,
@@ -388,7 +465,8 @@ def verify_day(prev_date: str, trade_date: str, verbose: bool = False) -> dict:
     只在盘后调用：此时可用 trade_date 涨停池（evidence 缓存，1 次请求）。
     status:
       confirmed 确认龙 —— 晋级 + 总分达标 + 非冰点
-      retired   退位龙 —— 掉队 / 未晋级 / 分数不足（保留观察，不删）
+      pending   晋级未确认 —— 晋级了但总分不足（还在板上，只是四支柱不够硬）
+      retired   退位龙 —— 未晋级 / 掉队（保留观察，不删）
       observe   只观察 —— 情绪冰点，一律不进确认提示区
     """
     import sys
@@ -399,6 +477,12 @@ def verify_day(prev_date: str, trade_date: str, verbose: bool = False) -> dict:
 
     pool = load_pool(prev_date) or {"items": []}
     zt_now = evidence.zt_pool(trade_date) or {}
+    # 池子里的 quote 来自 screener 行；纯涨停池入池的个股多数没有 screener 行，
+    # 于是换手/成交额为空，strength 的「封单占成交比」和 money 的「换手健康度」
+    # 只能拿中性分（两项各少 4 分）。晋级股最高只到 64，全部够不到
+    # CONFIRM_MIN=68 —— 2026-11-26 池 26 只晋级股 confirmed=0 就是这么来的。
+    # 验证前用腾讯批量补一次（1 次请求，零东财），只认验证当日行情。
+    _attach_quotes(pool.get("items") or [], only_date=trade_date)
     sent = sentiment_state()
     theme_limits = _theme_limit_map(pool)
     rank = _sector_rank()
@@ -416,10 +500,18 @@ def verify_day(prev_date: str, trade_date: str, verbose: bool = False) -> dict:
     for peers in theme_peers_map.values():
         peers.sort(key=lambda x: -x["lbc"])
 
+    # 验证日高度：晋级按晋级后的连板数，未晋级保留池子日高度。
+    # 打分用这个口径，避免晋级股被旧高度压分（如 3→4 板仍按 3 板给 18 分）。
+    def eff_lbc(it: dict) -> int:
+        prev = int(_num(it.get("lbc")) or 0)
+        now = int(_num((zt_now.get(it.get("code")) or {}).get("lbc")) or 0)
+        return max(prev, now)
+
     # 只对打分 Top10 拉龙虎榜/资金流，控制东财请求量
     pre: list[tuple[int, dict, dict]] = []
     for it in pool.get("items") or []:
-        s = score_one(it, zt_today=zt_now, theme_limits=theme_limits, sector_rank=rank)
+        s = score_one(it, zt_today=zt_now, theme_limits=theme_limits,
+                      sector_rank=rank, effective_lbc=eff_lbc(it))
         pre.append((s["total"], it, s))
     pre.sort(key=lambda x: -x[0])
 
@@ -438,16 +530,22 @@ def verify_day(prev_date: str, trade_date: str, verbose: bool = False) -> dict:
             except Exception:
                 dragon = {}
             try:
-                flow = evidence.fund_flow(code) or {}
+                flow = evidence.fund_flow(code, day=trade_date) or {}
             except Exception:
                 flow = {}
             s = score_one(it, zt_today=zt_now, theme_limits=theme_limits,
-                          sector_rank=rank, dragon=dragon, flow=flow)
+                          sector_rank=rank, dragon=dragon, flow=flow,
+                          effective_lbc=eff_lbc(it))
             total = s["total"]
         if sent["ice"]:
             status = "observe"
         elif advanced and total >= CONFIRM_MIN:
             status = "confirmed"
+        elif advanced:
+            # 晋级了但四支柱没过线：既不是确认龙，也不是「掉队退位」。
+            # 两者混在一档时，26 只晋级股里 22 只被打成「退位」，用户会误以为
+            # 它们当天走弱了。拆成独立一档，标签只说事实：晋级、未确认。
+            status = "pending"
         else:
             status = "retired"
         items.append({
@@ -455,6 +553,8 @@ def verify_day(prev_date: str, trade_date: str, verbose: bool = False) -> dict:
             "prev_lbc": prev_lbc, "now_lbc": now_lbc,
             "advanced": advanced, "on_limit": on_limit,
             "status": status, "score": s["total"], "score_detail": s["parts"],
+            # 逐项计分明细（每根柱由哪几个小项加出来），前端悬停直接显示公式
+            "score_items": s.get("detail"),
             "reasons": s["reasons"], "metrics": s["metrics"],
             "theme_peers": theme_peers_map.get(
                 it.get("hybk") or it.get("industry") or "", []),
@@ -467,21 +567,33 @@ def verify_day(prev_date: str, trade_date: str, verbose: bool = False) -> dict:
         })
 
     counts = {k: sum(1 for i in items if i["status"] == k)
-              for k in ("confirmed", "retired", "observe")}
+              for k in ("confirmed", "pending", "retired", "observe")}
+    # 监管异动按「验证日」的K线算：连板走到第几板触发异动，是次日的事
+    try:
+        from engines import regwatch
+        regwatch.annotate(items, trade_date, verbose=verbose)
+    except Exception as e:
+        if verbose:
+            print(f"[擒龙·闸门二] 监管异动计算跳过：{e}")
     out = {
         "pool_date": prev_date,
         "verified_on": trade_date,
         "built_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "sentiment": sent,
         "confirm_min": CONFIRM_MIN,
-        "rule": "晋级+四支柱≥68 且非冰点 → 确认龙；掉队 → 退位龙保留观察；冰点 → 只观察",
+        "rule": "晋级+四支柱≥68 且非冰点 → 确认龙；晋级但<68 → 晋级未确认；"
+                "未晋级 → 退位龙保留观察；冰点 → 只观察",
         "counts": counts,
         "items": items,
     }
     _dump(_path("verdict", prev_date), out)
     if verbose:
+        from engines import regwatch as _rw
+        st = _rw.stats(items)
         print(f"[擒龙·闸门二] {prev_date}→{trade_date}: 确认 {counts['confirmed']} / "
-              f"退位 {counts['retired']} / 观察 {counts['observe']} · 情绪 {sent['regime']}")
+              f"晋级未确认 {counts['pending']} / 退位 {counts['retired']} / "
+              f"观察 {counts['observe']} · 情绪 {sent['regime']}"
+              f" · 监管 严重{st['severe']}/异动{st['alert'] + st['warn']}/临界{st['near']}")
     return out
 
 
@@ -549,11 +661,15 @@ def intraday_check(slot: str, trade_date: str, pool_date: str | None = None,
     return out
 
 
-def _attach_quotes(items: list[dict]) -> None:
+def _attach_quotes(items: list[dict], only_date: str | None = None) -> None:
     """用腾讯快照批量补现价/涨幅（一次请求，零东财）。
 
     验证文件落盘时没有存实时行情，历史回看时三档行的现价/涨幅会是「—」。
     这里在 API 汇总时按代码批量补一次；接口失败就保持原值，不影响主流程。
+
+    only_date：只接受行情日期等于该交易日的快照。闸门二打分要用换手率/成交额，
+    但它只对「验证当日」有意义——回测历史日时快照给的是今天的价，补进去会
+    把过去的验证结论算错。日期不符就跳过，保持原值。
     """
     codes = [i.get("code") for i in items if i.get("code")]
     if not codes:
@@ -566,14 +682,30 @@ def _attach_quotes(items: list[dict]) -> None:
     for it in items:
         q = dict(it.get("quote") or {})
         s = qs.get(it.get("code")) or {}
-        if s.get("price") is not None:
-            q.update({k: s.get(k) for k in
-                      ("price", "prev", "open", "high", "low", "chg",
-                       "turnover", "amount", "amplitude", "vol_ratio", "quote_date")})
+        if s.get("price") is None:
+            continue
+        if only_date and str(s.get("quote_date") or "")[:10] != only_date:
+            continue
+        q.update({k: s.get(k) for k in
+                  ("price", "prev", "open", "high", "low", "chg",
+                   "turnover", "amount", "amplitude", "vol_ratio", "quote_date")})
         it["quote"] = q
 
 
 # ---------------------------------------------------------------- API 汇总
+def lane_status(it: dict) -> str:
+    """把落盘 status 归一到档位，兼容拆档前写的旧 verdict。
+
+    旧版闸门二只有「晋级+≥68 / 其它」两道，晋级但分数不够的会被写成 retired，
+    于是「晋级未确认」和「掉队退位」混在一档。读的时候按 advanced 自动纠正，
+    不必等重跑验证：晋级 = 还没掉队，标签就不该叫退位。
+    """
+    st = it.get("status")
+    if st == "retired" and it.get("advanced"):
+        return "pending"
+    return st
+
+
 def current(date: str | None = None) -> dict:
     """给 /api/dragon 用：最近一份「已验证」的潜龙池 + 盘中状态，三档归类。
 
@@ -586,8 +718,9 @@ def current(date: str | None = None) -> dict:
     if not date:
         date = next((d for d in pool_dates if load_verdict(d)), None) or latest_pool
     if not date:
-        return {"date": None, "confirmed": [], "retired": [], "observing": [],
-                "pool": None, "intraday": None, "empty": True,
+        return {"date": None, "confirmed": [], "pending": [], "retired": [],
+                "observing": [], "pool": None, "intraday": None, "empty": True,
+                "reg_stats": {},
                 "awaiting_verification": True, "latest_pool_date": None}
     pool = load_pool(date) or {}
     verdict = load_verdict(date)
@@ -606,11 +739,16 @@ def current(date: str | None = None) -> dict:
             break
     sent = verdict.get("sentiment") if verdict else (pool.get("sentiment") or sentiment_state())
 
-    confirmed, retired, observing = [], [], []
+    confirmed, pending, retired, observing = [], [], [], []
     for it in (verdict or {}).get("items") or []:
-        if it.get("status") == "confirmed":
+        st = lane_status(it)
+        if st != it.get("status"):
+            it = dict(it, status=st)   # 旧 verdict 的档位就地纠正，不改落盘文件
+        if st == "confirmed":
             confirmed.append(it)
-        elif it.get("status") == "observe":
+        elif st == "pending":
+            pending.append(it)
+        elif st == "observe":
             observing.append(it)
         else:
             retired.append(it)
@@ -620,15 +758,33 @@ def current(date: str | None = None) -> dict:
                           score_detail=None, reasons=[])
                      for i in (pool.get("items") or [])]
     confirmed.sort(key=lambda x: -(x.get("score") or 0))
+    pending.sort(key=lambda x: -(x.get("score") or 0))
     retired.sort(key=lambda x: -(x.get("score") or 0))
-    _attach_quotes(confirmed + retired + observing)
+    _attach_quotes(confirmed + pending + retired + observing)
+    # 监管异动：正常情况建池/验证时已落盘；旧文件（拆档前写的）现场用本地
+    # 日K缓存补算一次，allow_fetch=False 保证接口不为几只缺缓存的票去联网。
+    all_items = confirmed + pending + retired + observing
+    if any(not it.get("reg") for it in all_items):
+        try:
+            from engines import regwatch
+            regwatch.annotate(all_items, verdict.get("verified_on") if verdict else date,
+                              allow_fetch=False)
+        except Exception:
+            pass
+    try:
+        from engines import regwatch as _rw
+        reg_stats = _rw.stats(all_items)
+    except Exception:
+        reg_stats = {}
     return {
         "date": date,
         "sentiment": sent,
         "confirm_min": CONFIRM_MIN,
-        "counts": {"confirmed": len(confirmed), "retired": len(retired),
-                   "observing": len(observing)},
+        "reg_stats": reg_stats,
+        "counts": {"confirmed": len(confirmed), "pending": len(pending),
+                   "retired": len(retired), "observing": len(observing)},
         "confirmed": confirmed,
+        "pending": pending,
         "retired": retired,
         "observing": observing,
         "pool": {"date": pool.get("date"), "count": pool.get("count"),
@@ -638,10 +794,122 @@ def current(date: str | None = None) -> dict:
         "latest_pool_date": latest_pool,
         "intraday": intraday.get("slots") or {},
         "intraday_date": intraday.get("trade_date"),
-        "empty": not (confirmed or retired or observing),
+        "empty": not (confirmed or pending or retired or observing),
     }
 
 
+# ---------------------------------------------------------------- 历史回溯 / 接力矩阵
+def history_dates(n: int = 20) -> list[dict]:
+    """列出可回溯的池子日（含已验证 + 最新待验证），供前端日期切换器。
+
+    只读落盘文件，零网络。已验证的按 lane_status 重算四档计数（兼容旧 verdict），
+    最新未验证的池标 awaiting_verification=true（点击后整池进「只观察」）。
+    """
+    out: list[dict] = []
+    for d in dates("verdict", n):
+        v = load_verdict(d) or {}
+        # 档位计数按 lane_status 重算：旧 verdict 只有三档，直接把 counts 拿来用
+        # 会把「晋级未确认」算进退位（日期按钮提示里数字对不上）。
+        items = v.get("items") or []
+        counts = {}
+        for it in items:
+            k = lane_status(it)
+            k = "observing" if k == "observe" else k
+            counts[k] = counts.get(k, 0) + 1
+        out.append({
+            "date": d,
+            "verified_on": v.get("verified_on"),
+            "counts": counts or (v.get("counts") or {}),
+            "regime": (v.get("sentiment") or {}).get("regime"),
+            "awaiting_verification": False,
+        })
+    for d in dates("pool", 1):
+        if not load_verdict(d):
+            out.append({"date": d, "verified_on": None, "counts": {},
+                        "regime": None, "awaiting_verification": True})
+    out.sort(key=lambda x: x["date"], reverse=True)
+    return out[:n]
+
+
+def evolution(days: int = 10) -> dict:
+    """跨日龙头接力矩阵 + 每日交接摘要。只读落盘 verdict，零网络。
+
+    返回：
+      dates: 正序的池子日列表（左旧右新）
+      stocks: [{code,name,industry,confirmed_days,max_score,cells:{date:{status,score,now_lbc}}}]
+      summary: 最近一个验证日的交接摘要（续任/反包/新晋/退位）
+    只保留至少确认过一次（confirmed 或 rebound）的标的，按确认天数降序，
+    避免把每天几十只退位杂毛堆进矩阵。
+    """
+    vdates = sorted(dates("verdict", days))
+    if not vdates:
+        return {"dates": [], "stocks": [], "summary": "", "empty": True}
+
+    meta: dict[str, dict] = {}
+    cells: dict[str, dict[str, dict]] = {}
+    for d in vdates:
+        for it in (load_verdict(d) or {}).get("items") or []:
+            code = it.get("code")
+            st = lane_status(it)
+            if not code or st not in ("confirmed", "pending", "retired"):
+                continue  # 冰点 observe 不进矩阵，避免噪音
+            if code not in meta:
+                meta[code] = {"code": code, "name": it.get("name") or code,
+                              "industry": it.get("industry") or it.get("hybk") or "—"}
+            cells.setdefault(code, {})[d] = {
+                "status": st, "score": it.get("score"),
+                "now_lbc": it.get("now_lbc"), "advanced": bool(it.get("advanced")),
+            }
+
+    # 反包标记：前一日 retired、当日 confirmed → rebound
+    for i, d in enumerate(vdates):
+        if i == 0:
+            continue
+        prev_d = vdates[i - 1]
+        for code, m in cells.items():
+            cur, prev = m.get(d), m.get(prev_d)
+            if cur and cur["status"] == "confirmed" and prev and prev["status"] == "retired":
+                cur["status"] = "rebound"
+
+    rows = []
+    for code, m in meta.items():
+        cm = cells.get(code, {})
+        n_conf = sum(1 for c in cm.values() if c["status"] in ("confirmed", "rebound"))
+        if not n_conf:
+            continue
+        rows.append(dict(m, confirmed_days=n_conf,
+                         max_score=max((c.get("score") or 0) for c in cm.values()),
+                         cells=cm))
+    rows.sort(key=lambda r: (-r["confirmed_days"], -r["max_score"], r["code"]))
+    rows = rows[:20]
+
+    # 交接摘要：比较最近两个验证日
+    summary = ""
+    if len(vdates) >= 2:
+        last, prev = vdates[-1], vdates[-2]
+        stay, rebound, fresh, pend, retired = [], [], [], [], []
+        for r in rows:
+            cur, before = r["cells"].get(last), r["cells"].get(prev)
+            if cur and cur["status"] in ("confirmed", "rebound"):
+                if before and before["status"] == "confirmed":
+                    stay.append(f"{r['name']}({cur.get('now_lbc') or 0}板)续任")
+                elif cur["status"] == "rebound":
+                    rebound.append(f"{r['name']}反包回归")
+                else:
+                    fresh.append(f"{r['name']}新晋确认")
+            elif cur and cur["status"] == "pending" and before and before["status"] in ("confirmed", "rebound"):
+                # 还在板上但分数掉线：不是退位，标「晋级未确认」提醒复核
+                pend.append(f"{r['name']}晋级未确认({cur.get('score') or 0}分)")
+            elif cur and cur["status"] == "retired" and before and before["status"] in ("confirmed", "rebound"):
+                retired.append(f"{r['name']}退位")
+        parts = [x for x in [stay[0] if stay else "", "、".join(rebound[:3]),
+                             "、".join(fresh[:3]), "、".join(pend[:3]),
+                             "、".join(retired[:3])] if x]
+        summary = f"{last} 交接：" + " · ".join(parts) if parts else f"{last} 交接：龙头格局未变"
+    return {"dates": vdates, "stocks": rows, "summary": summary, "empty": not rows}
+
+
 __all__ = ["build_pool", "verify_day", "intraday_check", "current",
+           "history_dates", "evolution", "lane_status",
            "load_pool", "load_verdict", "load_intraday", "dates",
            "sentiment_state", "limit_price", "CONFIRM_MIN"]

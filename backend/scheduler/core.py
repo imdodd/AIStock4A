@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import threading
+import time
 from datetime import datetime
 from typing import Any
 
@@ -56,6 +57,11 @@ class Scheduler:
         self._watchdog_enabled = _flag("SCHEDULER_WATCHDOG", True)
         self._watchdog_interval = _int_env("SCHEDULER_WATCHDOG_INTERVAL", 120, 30)
         self._watchdog_stale = _int_env("SCHEDULER_WATCHDOG_STALE", 900, 120)
+        # 看门狗重建调度器之后要补跑当天漏掉的任务，否则 next_run 一跳到下个
+        # 交易日，当天就永久缺数（2026-11-27 系统睡到 15:54 就是这么丢的）。
+        # 两次补跑至少隔这么久，防止反复 heal 反复补。
+        self._catchup_gap = _int_env("SCHEDULER_CATCHUP_GAP", 600, 60)
+        self._last_catchup = 0.0
         self._stop_event = threading.Event()
         self._heals: list[dict] = []
 
@@ -133,6 +139,16 @@ class Scheduler:
     def start(self) -> dict:
         if self._started:
             return self.status()
+        # 先清上个进程留下的 running 占位，再注册/追补。顺序不能反：
+        # 带着尸检记录去 run_catchup，那些任务会被 try_start 判成 duplicate
+        # 直接跳过，于是「重启后当天 EOD 永久缺数」。
+        orphans = self.state.reclaim_orphans()
+        if orphans:
+            names = [f"{o['job_type']}@{o['trade_date']}" for o in orphans]
+            print(f"[scheduler] 回收上个进程遗留的运行占位：{names}", flush=True)
+            self._heals.append({"at": datetime.now(cal.CN_TZ).isoformat(),
+                                "action": "reclaim_orphans", "jobs": names})
+            del self._heals[:-10]
         for j in self._fixed_defs():
             try:
                 self._register(j)
@@ -169,6 +185,10 @@ class Scheduler:
         today = now.date().isoformat()
         for j in self._fixed_defs():
             if j["dedupe"] != "trade_day":
+                continue
+            if j.get("catchup") is False:
+                results.append({"ok": True, "skipped": "catchup_disabled",
+                                "job": j["id"], "key": day})
                 continue
             if self.state.has_success(j["id"], day):
                 results.append({"ok": True, "skipped": "already_done",
@@ -264,13 +284,75 @@ class Scheduler:
             if job:
                 self.backend.add(jid, job["cron"], self._run, replace=True)
 
+        # 重建只是把指针拨回未来，已经错过的时刻不会自己回来：next_run 会
+        # 直接算到下个交易日，当天就永久缺数。所以重建之后必须补一次。
+        caught: list[str] = []
+        if healed and self.catchup:
+            caught = self._catchup_after_heal()
+
         rec = {"at": now.isoformat(),
                "stale": [{"id": j, "lag_sec": int(lag)} for j, lag in stale],
-               "missing": missing, "healed": healed}
+               "missing": missing, "healed": healed, "catchup": caught}
         self._heals.append(rec)
         del self._heals[:-10]
         print(f"[watchdog] 检测到调度停摆，已自愈：stale={stale} "
-              f"missing={missing} backend_healed={healed}", flush=True)
+              f"missing={missing} backend_healed={healed} 补跑={caught}", flush=True)
+
+    # ------------------------------------------------------------ 停摆后补跑
+    def _catchup_after_heal(self) -> list[str]:
+        """重建调度器后在后台补跑「今天该跑却没过」的任务。
+
+        只补**今天确有触发时刻且已过点**的，与 ``run_catchup`` 的差别在于：
+        后者对「今天本不触发」的周更/季更任务会按交易日规则补（例如
+        ``sector_map_refresh`` 是周日 3:00，周五启动时会被当成缺跑去补，
+        白打 1000+ 次 clist）。这里刻意不碰它们。
+
+        返回本次真正发起的 job id 列表，供 watchdog 记录。补跑失败不会
+        反复重试：``next_run`` 已在未来，看门狗不会再判定 stale，避免在
+        上游故障时把配额耗光。
+        """
+        now_mono = time.monotonic()
+        with self._lock:
+            if now_mono - self._last_catchup < self._catchup_gap:
+                return []
+            self._last_catchup = now_mono
+
+        now = datetime.now(cal.CN_TZ)
+        today = now.date().isoformat()
+        todo: list[str] = []
+        for j in self._fixed_defs():
+            if j.get("dedupe") != "trade_day":
+                continue
+            if not int(j.get("enabled", 1)):
+                continue
+            if j.get("catchup") is False:      # 错峰任务（如周日 3 点的映射表）不追补
+                continue
+            first = self._first_fire_today(j["cron"], now)
+            if not first:                       # 今天本就不该跑
+                continue
+            if now < datetime.fromisoformat(first):   # 还没到点，交给正常调度
+                continue
+            if self.state.has_success(j["id"], today):
+                continue
+            todo.append(j["id"])
+        if not todo:
+            return []
+        threading.Thread(target=self._safe_catchup, args=(todo, today),
+                         name="astock-catchup-heal", daemon=True).start()
+        return todo
+
+    def _safe_catchup(self, todo: list[str], day: str) -> None:
+        done, failed = [], []
+        for jid in todo:
+            try:
+                r = self._run(jid, trade_date=day)
+                if r.get("ok") and not r.get("skipped"):
+                    done.append(jid)
+                elif not r.get("ok"):
+                    failed.append(f"{jid}:{r.get('status') or r.get('error')}")
+            except Exception as e:                       # noqa: BLE001
+                failed.append(f"{jid}:{type(e).__name__}")
+        print(f"[watchdog] 补跑完成 day={day} 成功={done} 失败/跳过={failed}", flush=True)
 
     # ------------------------------------------------------------ 自定义 job CRUD
     def add_custom(self, payload: dict) -> dict:

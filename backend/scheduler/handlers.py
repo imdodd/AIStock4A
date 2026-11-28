@@ -158,6 +158,22 @@ def h_eod(params: dict, ctx: dict) -> dict:
     return result
 
 
+def h_sector_kline_retry(params: dict, ctx: dict) -> dict:
+    """板块日 K 延迟补跑：捡回 EOD 15:30 因临时网络故障漏掉的增量。
+
+    背景：板块 K 线先问东财 BK 源、失败再退腾讯成分股。EOD 时段上游偶发
+    DNS/SSL 断连会让它整批 0 成功，klines.json 被原子写保护原地不动，数据
+    就卡住一两天。这里在盘后晚些时候（18:30）再跑一次增量补齐——此时网络
+    多半已恢复，且脚本本身幂等（已最新的板块跳过），不会重复抓。
+    """
+    g = _guard(ctx, "jobs.fetch_sector_klines")
+    if g:
+        return g
+    args = list(params.get("args") or [])
+    return _subprocess("jobs.fetch_sector_klines", args,
+                       {**ctx, "timeout": int(params.get("timeout") or 900)})
+
+
 def h_sector_map(params: dict, ctx: dict) -> dict:
     """行业口径映射表刷新：从 EOD 拆出的独立低频任务。
 
@@ -283,6 +299,7 @@ def h_event_watch(params: dict, ctx: dict) -> dict:
 JOB_HANDLERS: dict[str, Callable[[dict, dict], dict]] = {
     "noop": h_noop,
     "eod": h_eod,
+    "sector_kline_retry": h_sector_kline_retry,
     "sector_map": h_sector_map,
     "pregen": h_pregen,
     "news_round": h_news_round,
@@ -302,11 +319,19 @@ FIXED_JOBS: tuple[dict, ...] = (
     # APScheduler 后端在 backends.crontab_to_apscheduler 里做一次映射。
     {"id": "eod_close", "job_type": "eod", "cron": "30 15 * * 1-5",
      "params": {}, "note": "盘后 EOD 管道（15:30 收盘后留 30 分钟给数据源落定；交易日过滤由 core 执行）"},
+    # 板块日 K 延迟补跑：EOD 15:30 的板块 K 线补齐若遇临时 DNS/SSL 故障会整批失败，
+    # 脚本原子写保护会让 klines.json 停在旧日。18:30 再跑一次增量补齐，脚本幂等
+    # （已最新板块跳过），无需额外网络预算即可自动捡回断档。
+    {"id": "sector_kline_retry", "job_type": "sector_kline_retry", "cron": "30 18 * * 1-5",
+     "params": {}, "note": "板块日K延迟补跑（18:30）：捡回 EOD 时段因临时网络故障漏掉的增量，幂等"},
     # 行业口径映射表：从 EOD 拆出，周日凌晨 3 点单独跑。原在盘后和抓数一起跑，
     # 496 个行业的成分股翻页是全天最大突发（1000+ 次 clist），是东财限流主因之一。
     # all_days=True 绕开交易日过滤——周日本就不是交易日。
+    # catchup=False：这是「周日 3 点」的错峰任务，不能按交易日追补。否则周五
+    # 重启服务时，run_catchup 会把它当成「今天缺跑」立刻拉起，在工作日白天
+    # 打出 1000+ 次 clist，既撞限流又毫无意义（2026-11-27 07:41 就这么跑过一次）。
     {"id": "sector_map_refresh", "job_type": "sector_map", "cron": "0 3 * * 0",
-     "params": {}, "all_days": True,
+     "params": {}, "all_days": True, "catchup": False,
      "note": "行业口径映射表（东财BK→本地pt），周日凌晨错峰刷新，增量复用成员快照"},
     # 消息采集不走交易日日历：周末和节假日恰恰是政策、海外市场、公司公告的
     # 高发时段，周一开盘前必须已经在库里。all_days 会绕过 core 的交易日守卫。

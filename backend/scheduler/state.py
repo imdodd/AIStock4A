@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 from datetime import datetime
 from typing import Any
@@ -27,6 +28,25 @@ class JobState:
         self.conn = repo.connection
         self.owner = repo.cfg.owner
         self._lock = threading.RLock()
+        self._ensure_columns()
+
+    def _ensure_columns(self) -> None:
+        """老库补 ``pid`` 列。
+
+        ``schema.sql`` 是 CREATE TABLE IF NOT EXISTS，已存在的表不会长出新列，
+        这里做一次幂等 ALTER，避免升级后 try_start 写 pid 直接报错。
+        """
+        with self._lock:
+            try:
+                cols = {r[1] for r in self.conn.execute(
+                    "PRAGMA table_info(job_runs)").fetchall()}
+            except Exception:                       # noqa: BLE001
+                return
+            if cols and "pid" not in cols:
+                try:
+                    self.conn.execute("ALTER TABLE job_runs ADD COLUMN pid INTEGER")
+                except Exception:                   # noqa: BLE001
+                    pass
 
     # ------------------------------------------------------------ job_defs
     def list_defs(self, only_enabled: bool = False) -> list[dict]:
@@ -81,17 +101,57 @@ class JobState:
 
     # ------------------------------------------------------------ job_runs
     def try_start(self, job_type: str, trade_date: str) -> bool:
-        """同一 (owner, job_type, trade_date) 只允许跑一次。
+        """同一 (owner, job_type, trade_date) 同一时刻只允许一个执行者。
 
-        INSERT OR IGNORE 是原子去重：哪怕两个进程同时触发，也只有一个返回 True。
+        语义是「占位」，不只是「插入」：
+          * 已是 ``ok``  → 当天已完成，不重跑（省配额，这是原语义）；
+          * 已是 ``running`` → 有人占着，不抢；
+          * ``error`` / 被回收的孤儿 → **允许重占**，否则一次失败就把当天
+            锁死到收盘，重启也救不回来。
+        用 UPSERT 的 WHERE 过滤表达这套规则，写锁由 SQLite 序列化，并发下
+        仍只有一个返回 True。
+        同时记下占用者 pid，供重启后辨别孤儿占位。
         """
         with self._lock:
             cur = self.conn.execute(
-                "INSERT OR IGNORE INTO job_runs"
-                "(owner,job_type,trade_date,status,started_at,finished_at,detail) "
-                "VALUES(?,?,?,?,?,NULL,NULL)",
-                (self.owner, job_type, trade_date, "running", _now()))
+                "INSERT INTO job_runs"
+                "(owner,job_type,trade_date,status,started_at,finished_at,detail,pid) "
+                "VALUES(?,?,?,?,?,NULL,NULL,?) "
+                "ON CONFLICT(owner,job_type,trade_date) DO UPDATE SET "
+                "status='running', started_at=excluded.started_at, "
+                "finished_at=NULL, detail=NULL, pid=excluded.pid "
+                "WHERE job_runs.status NOT IN ('running','ok')",
+                (self.owner, job_type, trade_date, "running", _now(), os.getpid()))
             return cur.rowcount > 0
+
+    def reclaim_orphans(self) -> list[dict]:
+        """回收上个进程遗留的 running 占位，返回被回收的行。
+
+        进程重启（含被手动重启、崩溃、任务管理器结束）时，正在跑的任务
+        来不及走 ``finish``，数据库里就留下一条 ``status='running'``。
+        这条行会让后续所有 ``try_start`` 都返回 False —— 当天该任务既不会
+        正常触发、也不会被追补，前端还一直显示「运行中」，且毫无告警。
+
+        判据用 pid 而不是时间：EOD 的成分股分析单次就可能跑 40 分钟以上，
+        按超时猜会把真在跑的任务误杀；pid 不是当前进程则一定不是我在跑。
+        服务为单进程部署（nssm 未开 --reload），pid 复用也只会指向另一个
+        不会去 finish 这行的进程，回收依然安全。
+        """
+        me = os.getpid()
+        where = ("owner=? AND status='running' AND (pid IS NULL OR pid<>?)")
+        with self._lock:
+            rows = self.conn.execute(
+                f"SELECT job_type, trade_date, started_at, pid FROM job_runs WHERE {where}",
+                (self.owner, me)).fetchall()
+            if not rows:
+                return []
+            self.conn.execute(
+                f"UPDATE job_runs SET status='error', finished_at=?, detail=? WHERE {where}",
+                (_now(),
+                 dumps({"error": "进程重启中断，已回收孤儿占位",
+                        "reason": "orphan_running_reclaimed"}),
+                 self.owner, me))
+        return [dict(r) for r in rows]
 
     def finish(self, job_type: str, trade_date: str, status: str,
                detail: Any = None) -> None:
