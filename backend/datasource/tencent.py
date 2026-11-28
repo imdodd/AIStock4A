@@ -25,6 +25,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 from .base import DataSource
+from . import nethttp
 
 UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 BOARD_URL = "https://proxy.finance.qq.com/cgi/cgi-bin/rank/hs/getBoardRankList"
@@ -87,6 +88,21 @@ def _trip_breaker(seconds: float = BLOCK_COOLDOWN):
 _sina_only_until = [0.0]
 _sina_lock = threading.Lock()
 
+# 最近一次 fetch_kline 的诊断：整批取不到时给调用方打印真实原因，
+# 而不是让上层写死"多为接口限流"（DNS 失败 / 网络断连 / 空数据都不同）。
+# 结构：{"tx": 原因或None, "sina": 原因或None, "sina_only": bool}
+last_kline_diag: dict = {"tx": None, "sina": None, "sina_only": False}
+
+
+def _err_text(e) -> str:
+    """把异常压成一行可读原因，带 HTTP 状态码 / DNS 关键字。"""
+    if e is None:
+        return ""
+    s = f"{type(e).__name__}: {e}"
+    if isinstance(e, urllib.error.HTTPError):
+        s = f"HTTP {e.code} {e.reason}"
+    return s[:160]
+
 
 def _mark_sina_only(seconds: float = 600):
     with _sina_lock:
@@ -94,28 +110,23 @@ def _mark_sina_only(seconds: float = 600):
 
 
 def _get_json(url: str, retry: int = 2) -> dict:
-    last = None
-    for i in range(retry + 1):
-        _wait_turn()
-        try:
-            req = urllib.request.Request(url, headers=UA)
-            with urllib.request.urlopen(req, timeout=20) as r:
-                return json.loads(r.read().decode("utf-8", "ignore"))
-        except urllib.error.HTTPError as e:
-            last = e
-            if e.code in (429, 501, 503):
-                # 被限流：立刻熔断并抛给调用方走兜底，不要再重试。
-                # 以前这里还会继续 run 一次 retry，而 _wait_turn() 会先睡满
-                # 45 秒冷却；多线程轮流触发 501 时冷却被不断延长，整批任务饿死。
-                _trip_breaker()
-                raise
-            if i < retry:
-                time.sleep(0.5 * (i + 1))
-        except Exception as e:               # 网络抖动重试一次即可
-            last = e
-            if i < retry:
-                time.sleep(0.5 * (i + 1))
-    raise last  # type: ignore[misc]
+    """取腾讯 JSON：统一走 nethttp（限速 + host 熔断 + 连接层不重试）。
+
+    2026-11-27 P0：限速从本模块的 _wait_turn（0.05s 进程内串行令牌）换成
+    nethttp 的按 host 令牌桶（qt.gtimg.cn 20/s、突发 10），语义等价但线程安全
+    且全站统一。501/429 时 nethttp 直接给该 host 记 600s 熔断，这里同步打开
+    新浪降级开关，避免继续对腾讯发请求。
+    """
+    try:
+        return nethttp.http_json(url, timeout=20, retry=retry, headers=UA)
+    except nethttp.CircuitOpen:
+        _mark_sina_only()
+        raise
+    except urllib.error.HTTPError as e:
+        if e.code in (429, 501, 503):
+            _trip_breaker()
+            _mark_sina_only()
+        raise
 
 
 class TencentSource(DataSource):
@@ -165,6 +176,8 @@ class TencentSource(DataSource):
         """
         codes = [c for c in dict.fromkeys(codes) if c]
         out: dict[str, list[dict]] = {}
+        tx_err: list[str] = []
+        sina_err: list[str] = []
 
         def one(code: str):
             bars = None
@@ -178,20 +191,36 @@ class TencentSource(DataSource):
                     if node:
                         arr = node.get("qfqday") or node.get("day") or node.get("hfqday") or []
                         bars = _bars(arr)
+                    if not bars:
+                        tx_err.append(f"{code}:空数据")
                 except urllib.error.HTTPError as e:
+                    tx_err.append(_err_text(e))
                     if e.code in (429, 501, 503):
                         _mark_sina_only()
-                except Exception:
+                except Exception as e:
+                    tx_err.append(_err_text(e))
                     bars = None
             if not bars:                     # 腾讯限流/无数据 → 新浪兜底
-                bars = _sina_kline(code, limit)
+                try:
+                    bars = _sina_kline(code, limit)
+                    if not bars:
+                        sina_err.append(f"{code}:空数据")
+                except Exception as e:
+                    sina_err.append(_err_text(e))
             return code, bars
 
         with ThreadPoolExecutor(max_workers=WORKERS) as ex:
             for code, bars in ex.map(one, codes):
                 if bars:
                     out[code] = bars
-        src = "新浪兜底" if time.time() < _sina_only_until[0] else "腾讯"
+        sina_only = time.time() < _sina_only_until[0]
+        last_kline_diag.clear()
+        last_kline_diag.update({
+            "tx": tx_err[0] if tx_err else None,
+            "sina": sina_err[0] if sina_err else None,
+            "sina_only": sina_only,
+        })
+        src = "新浪兜底" if sina_only else "腾讯"
         self._log(f"  [日K·{src}] 请求 {len(codes)} 只，成功 {len(out)} 只")
         return out
 
@@ -203,9 +232,8 @@ class TencentSource(DataSource):
         for i in range(0, len(codes), 50):
             chunk = codes[i:i + 50]
             try:
-                req = urllib.request.Request(QUOTE_URL + ",".join(chunk), headers=UA)
-                with urllib.request.urlopen(req, timeout=15) as r:
-                    text = r.read().decode("gbk", "ignore")
+                text = nethttp.http_bytes(QUOTE_URL + ",".join(chunk), timeout=15,
+                                          headers=UA).decode("gbk", "ignore")
             except Exception:
                 continue
             for line in text.split(";"):
@@ -234,9 +262,8 @@ class TencentSource(DataSource):
         for i in range(0, len(codes), 60):
             chunk = codes[i:i + 60]
             try:
-                req = urllib.request.Request(QUOTE_URL + ",".join(chunk), headers=UA)
-                with urllib.request.urlopen(req, timeout=15) as r:
-                    text = r.read().decode("gbk", "ignore")
+                text = nethttp.http_bytes(QUOTE_URL + ",".join(chunk), timeout=15,
+                                          headers=UA).decode("gbk", "ignore")
             except Exception:
                 continue
             for line in text.split(";"):
@@ -329,9 +356,9 @@ class TencentSource(DataSource):
 
     @staticmethod
     def _em_json(url: str) -> dict:
-        req = urllib.request.Request(url, headers={**UA, "Referer": "https://quote.eastmoney.com/"})
-        with urllib.request.urlopen(req, timeout=12) as r:
-            return json.loads(r.read().decode("utf-8", "replace"))
+        # 东财接口统一出口：动态代理 + host 熔断 + 连接层不重试
+        return nethttp.http_json(url, timeout=12,
+                                 headers={**UA, "Referer": "https://quote.eastmoney.com/"})
 
     def close(self) -> None:
         """无连接池，占位以对齐 DataSource 收尾约定。"""
@@ -372,9 +399,7 @@ def _sina_kline(code: str, limit: int) -> list[dict] | None:
     n = min(int(limit), 1023)                # 新浪单次上限
     url = f"{SINA_KLINE_URL}?symbol={code}&scale=240&ma=no&datalen={n}"
     try:
-        req = urllib.request.Request(url, headers=UA)
-        with urllib.request.urlopen(req, timeout=15) as r:
-            text = r.read().decode("utf-8", "ignore")
+        text = nethttp.http_text(url, timeout=15, headers=UA)
         i, j = text.find("["), text.rfind("]")
         if i < 0 or j <= i:
             return None

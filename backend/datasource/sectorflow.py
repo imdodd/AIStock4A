@@ -19,11 +19,15 @@
     没有超大/大单拆分与逐日历史，所以只能给「今日 / 近5日 / 近20日」三段摘要，
     前端会把柱图换成 3 根柱子并标注口径。
 
-为什么要有熔断（_BREAK）
-    东财对高频、无 cookie 的抓取会直接掐连接（RemoteDisconnected），且会从单个
-    接口扩大到整个 push2/push2his 域名，持续几十分钟到数小时。原实现是「每次
-    打开大盘页都 7 次翻页 + 每次点板块 1 次历史」，一旦被限流就不断重试、越试
-    越久。这里失败一次就熔断 BREAK_SECONDS，期间直接用缓存/备源，不再撞墙。
+为什么要有熔断
+    东财对高频、无 cookie 的抓取会直接掐连接（RemoteDisconnected / curl rc=56），
+    且会从单个接口扩大到整个 push2/push2his 域名，持续几十分钟到数小时。原实现是
+    「每次打开大盘页都 7 次翻页 + 每次点板块 1 次历史」，一旦被限流就不断重试、
+    越试越久。熔断期内直接用缓存/备源，不再撞墙。
+
+    2026-11-27 P0：熔断与代理判定已上移到 datasource/nethttp.py + netproxy.py，
+    按 host 记账并落盘 cache/http_break.json 跨进程共享。本模块只保留
+    `upstream_state()`（聚合东财全部 host）与 `_trip()` 两个兼容入口。
 
 本地行业（data/snapshot/sectors.json，申万二级 124 个）里 4 个银行二级
 东财命名不带 Ⅱ 后缀，匹配时对两侧名称做归一化（去掉 Ⅰ/Ⅱ 罗马数字后缀）。
@@ -33,10 +37,15 @@ from __future__ import annotations
 import json
 import os
 import re
+import socket
 import subprocess
 import time
 import urllib.request
 from urllib.parse import urlparse
+
+# 2026-11-27 P0：代理判定与 HTTP 出口收敛为全站单一实现。
+# 以前每个模块各写一套 urllib/curl/重试/熔断，导致「一处被封、全链路继续撞」。
+from datasource import nethttp, netproxy
 
 UA = {
     "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -55,83 +64,83 @@ RANK_CACHE = os.path.join(CACHE_DIR, "sectorflow_rank.json")
 HIST_CACHE_DIR = os.path.join(CACHE_DIR, "sectorflow_hist")
 
 BREAK_SECONDS = 600          # 上游失败后静默 10 分钟，期间只读缓存
+# K 线接口（push2his kline）的封禁形态与行情列表不同：不返回 429，而是 TCP 层
+# 直接断连（urllib RemoteDisconnected / curl rc=56 schannel）。这种是 IP 级风控，
+# 越重试窗口越长，所以一旦连续 KLINE_STREAK_LIMIT 次命中就直接长静默。
+KLINE_STREAK_LIMIT = 3
+KLINE_BREAK_SECONDS = 3600   # 60 分钟，宁可少补一天也不要续期封禁
+# 判定「被掐连接」的特征串（大小写不敏感）
+_TCP_CUT_MARKS = ("schannel", "remotedisconnected", "connection reset",
+                  "connection aborted", "rc=56", "rc=35", "rc=52",
+                  "eof occurred", "server closed abruptly", "missing close_notify",
+                  "without response")
 # 熔断状态落盘共享：EOD / 资讯 / 前端是各自独立的 Python 进程，进程内内存熔断
 # 互不感知——A 进程撞限流进了熔断，B 进程照样继续打，把整个出口 IP 越撞越死。
 # 这里把熔断写到一个共享文件，任何进程 trip 后所有进程都能看到，实现「一处
 # 被限、全链路静默」。文件在 cache 目录，随数据目录走；读侧按 mtime 缓存，
 # 几乎无额外 IO 开销。
-BREAK_FILE = os.path.join(CACHE_DIR, "sectorflow_break.json")
-_MEM: dict = {"rank": (0.0, None), "hist": {}, "tx": (0.0, None),
-              "prefer_curl": False, "last_kline_error": ""}
-_BREAK: dict = {"until": 0.0, "why": "", "hits": 0}
-_BREAK_CACHE: dict = {"mtime": -1.0, "data": None}
+_MEM: dict = {"rank": (0.0, None), "hist": {}, "tx": (0.0, None), "snap": (0.0, None),
+              "prefer_curl": False, "last_kline_error": "",
+              "kline_streak": 0, "kline_last_ok": 0.0}
 
 
 # ---------------------------------------------------------------- 基础工具
 
-# WorkBuddy / IDE 等宿主会往 shell 注入指向本机的 HTTP(S)_PROXY（127.0.0.1:<随机端口>，
-# 端口每次会话都变，不能写死）。这类代理的 TLS 层经 schannel 握手后被对端提前关闭，
-# curl 报 (56) schannel: server closed abruptly，看起来和东财限流一模一样；一旦 urllib
-# 抖动失败切到 curl，就全挂并触发 _trip 熔断，把板块资金流误降级成腾讯备源。
-# 只剥掉「指向本机」的代理：公网代理（公司/机房出网必经）必须保留，否则生产会断网。
-_PROXY_KEYS = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
-               "http_proxy", "https_proxy", "all_proxy")
+# 2026-11-26 实测修正（重要）：WorkBuddy/IDE 宿主注入的本机 HTTP(S)_PROXY
+# （127.0.0.1:<随机端口>，端口每次会话都变）在本机是访问东财的必经出网通道，不是污染。
+# 对照实测（同一时刻、同一 URL）：
+#   保留代理 → 东财 urllib 0.40s 成功 / curl 0.37s 成功 / 腾讯正常
+#   剥离代理 → 东财 urllib RemoteDisconnected / curl (56) schannel rc56，腾讯仍通
+# 先前版本误判本机代理为 schannel 故障源并主动剥离，导致 curl 走直连必挂、_MEM
+# 熔断后整链降级腾讯备源——这正是 26 日板块 K 线 124 个全 0 成功的真正原因之一。
+# 结论：curl 直接继承宿主环境，不剥任何代理（公网代理同理必须保留，否则生产断网）。
+#
+# 2026-11-26 二次修正（动态重读）：宿主注入的代理端口会随沙箱会话变化
+# （实测 55974 → 52321，旧端口关闭后所有请求恒定 0.1s 报 rc=56，看起来像
+# 被上游封禁，实际是打在了死端口上）。而长驻进程的 os.environ 是启动快照，
+# 因此代理地址不能只在模块导入时读一次。
+#
+# 重要：不要靠"扫本机监听端口"猜代理。实测本机 36 个监听端口里，命中率最高
+# 的恰是钉钉(62910)/WorkBuddy(62056)/WPS 这些无关进程——把请求发到它们
+# 身上比不通更糟（会拿到莫名其妙的响应）。所以只认三个显式来源，并逐个探活：
+#   1. ASTOCK_PROXY 环境变量（显式指定，最高优先，生产用这个）
+#   2. <DATA_DIR>/cache/proxy.url 文件（可热改，改完无需重启服务）
+#   3. 系统 HTTP(S)_PROXY
+# 全部探不通就直连（清空代理变量），绝不猜。
+_PROXY_PORTS = ("https_proxy", "HTTPS_PROXY", "http_proxy", "HTTP_PROXY",
+                "all_proxy", "ALL_PROXY")
+_PROXY_CACHE: dict = {"url": "", "checked": 0.0, "source": ""}
+_PROXY_RECHECK = 30.0        # 30s 内复用上次结果，避免每个板块都探活
 
 
-def _curl_env() -> dict:
-    """curl 子进程专用环境：剔除指向本机的代理，保留真实远程代理。"""
-    env = dict(os.environ)
-    for key in _PROXY_KEYS:
-        val = (env.get(key) or "").strip()
-        if not val:
-            continue
-        raw = val if "://" in val else "http://" + val
-        try:
-            host = (urlparse(raw).hostname or "").lower()
-        except Exception:  # noqa: BLE001
-            host = ""
-        if host in ("localhost", "127.0.0.1", "::1", "0.0.0.0") or host.startswith("127."):
-            env.pop(key, None)
-    return env
+def _norm_proxy(v: str) -> str:
+    """兼容旧名：代理归一化统一走 netproxy。"""
+    return netproxy.norm(v)
+
+
+# 代理判定统一由 datasource/netproxy.py 提供（全站唯一实现，详见该模块注释）。
+# 以下保留旧名别名，兼容既有调用方与运维脚本，行为完全一致。
+_PROXY_PORTS = netproxy.PROXY_PORTS
+_PROXY_CACHE = netproxy._CACHE
+_port_alive = netproxy.alive
+_proxy_file = netproxy.proxy_file
+_proxy_sources = netproxy.sources
+_resolve_proxy = netproxy.resolve
+_curl_env = netproxy.curl_env
+proxy_state = netproxy.state
 
 
 def _get(url: str, timeout: int = 8, retry: int = 1, headers: dict | None = None) -> dict:
-    hdrs = headers or UA
-    last = None
-    # urllib 重试全失败即判定本机 urllib 不可用，记住后续直连 curl。
-    # 关键：不能在「curl 成功」时才记住——上游限流时 curl 也会失败，
-    # 那样本地每次仍白试 urllib 2 次，请求翻 3 倍、每板块 4~5s，反而加重限流。
-    if not _MEM.get("prefer_curl"):
-        for i in range(retry + 1):
-            try:
-                req = urllib.request.Request(url, headers=hdrs)
-                with urllib.request.urlopen(req, timeout=timeout) as r:
-                    return json.loads(r.read().decode("utf-8", "replace"))
-            except Exception as e:  # noqa: BLE001
-                last = e
-                time.sleep(0.4 * (i + 1))
-        _MEM["prefer_curl"] = True
-    try:
-        # Windows schannel + 东财 TLS1.3 会报 (56) server closed abruptly (missing
-        # close_notify)，而显式指定 TLS1.2 立刻恢复正常（实测 2026-11-24）。
-        # Linux/OpenSSL 上该参数同样兼容，故统一加上，避免平台分支。
-        cmd = ["curl", "-sS", "--tlsv1.2", "--max-time", str(max(5, timeout))]
-        for k, v in hdrs.items():
-            cmd += ["-H", f"{k}: {v}"]
-        cmd.append(url)
-        # 关键：不能让 curl 继承宿主机注入的本机代理，否则 schannel 报错被误判成限流。
-        p = subprocess.run(cmd, capture_output=True, timeout=max(12, timeout + 4),
-                           env=_curl_env())
-        if p.returncode == 0 and p.stdout:
-            return json.loads(p.stdout.decode("utf-8", "replace"))
-        # curl 也失败：把 stderr 带出来。之前只记 urllib 的 RemoteDisconnected，
-        # 看不出 curl 是被拒、超时还是返回空，无法区分「坏代码」与「限流」。
-        err = (p.stderr or b"").decode("utf-8", "replace").strip()
-        if err:
-            last = RuntimeError(f"curl rc={p.returncode}: {err[:120]}")
-    except Exception as e:  # noqa: BLE001
-        last = e
-    raise last  # type: ignore[misc]
+    """取东财 JSON：统一走 datasource/nethttp。
+
+    2026-11-27 P0 改造：原来这里是独立的一套 urllib/curl 双通道 + prefer_curl
+    状态机，与档案、研报、腾讯、资讯四个模块的实现互不相通。现在全部收敛到
+    nethttp，一次拿到三件事：
+      · 动态代理（端口失效自动重探，不必重启进程）
+      · 按 host 熔断，落盘跨进程共享（一处被封，全链路静默）
+      · 连接层被掐（rc=56 / RemoteDisconnected）永不重试，避免给封禁续期
+    """
+    return nethttp.http_json(url, timeout=timeout, retry=retry, headers=headers)
 
 
 def _num(v):
@@ -153,58 +162,24 @@ def _now() -> str:
     return time.strftime("%Y-%m-%d %H:%M:%S")
 
 
-def _sync_break_from_disk() -> None:
-    """读共享熔断文件；发现别的进程的熔断就合并进本进程（取最晚的 until）。"""
-    try:
-        mt = os.path.getmtime(BREAK_FILE)
-    except OSError:
-        return
-    if mt == _BREAK_CACHE["mtime"]:
-        return
-    _BREAK_CACHE["mtime"] = mt
-    try:
-        with open(BREAK_FILE, encoding="utf-8") as f:
-            d = json.load(f) or {}
-    except Exception:  # noqa: BLE001
-        return
-    _BREAK_CACHE["data"] = d
-    disk_until = float(d.get("until") or 0)
-    if disk_until > _BREAK["until"]:
-        _BREAK["until"] = disk_until
-        _BREAK["why"] = str(d.get("why") or "")[:120]
-        _BREAK["hits"] = max(int(_BREAK.get("hits") or 0), int(d.get("hits") or 0))
+def _trip(why: str, seconds: float | None = None,
+          host: str = "push2his.eastmoney.com") -> None:
+    """上游不可用 → 交给 nethttp 的 host 级熔断（落盘跨进程共享）。
 
-
-def _write_break() -> None:
-    """把本进程熔断原子写入共享文件，供其它进程读取。"""
-    try:
-        os.makedirs(CACHE_DIR, exist_ok=True)
-        tmp = BREAK_FILE + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump({"until": _BREAK["until"], "why": _BREAK["why"],
-                       "hits": int(_BREAK.get("hits") or 0),
-                       "written_at": _now()}, f, ensure_ascii=False)
-        os.replace(tmp, BREAK_FILE)
-        _BREAK_CACHE["mtime"] = os.path.getmtime(BREAK_FILE)
-    except Exception:  # noqa: BLE001  熔断写失败不能反过来打断取数
-        pass
-
-
-def _trip(why: str) -> None:
-    """上游不可用，进熔断（本进程 + 共享文件）。"""
-    _sync_break_from_disk()
-    _BREAK["until"] = time.time() + BREAK_SECONDS
-    _BREAK["why"] = str(why)[:120]
-    _BREAK["hits"] = int(_BREAK.get("hits") or 0) + 1
-    _write_break()
+    host 默认取 K 线域名；排行/资金流（push2）调用时显式传自己的域名，
+    这样「只封了 K 线」不会连带停掉资金流，反之亦然。
+    """
+    nethttp.trip(host, why, float(seconds if seconds is not None else BREAK_SECONDS))
 
 
 def upstream_state() -> dict:
-    """给接口层/前端看的熔断状态（合并共享文件的跨进程状态）。"""
-    _sync_break_from_disk()
-    left = max(0, int(_BREAK["until"] - time.time()))
-    return {"blocked": left > 0, "retry_in": left, "why": _BREAK["why"],
-            "hits": _BREAK["hits"], "shared": True}
+    """东财整体熔断状态（多 host 聚合、跨进程共享）。
+
+    任一东财 host 处于熔断期就算 blocked——它们共用同一个出口 IP，一个域名
+    被封时其它域名通常也撑不久，继续打只会加重行为评分。
+    """
+    st = nethttp.eastmoney_state()
+    return {**st, "hits": int(st.get("streak") or 0), "shared": True}
 
 
 def _read_json(path: str):
@@ -254,17 +229,27 @@ def _em_ranking() -> list[dict]:
 
 # ---------------------------------------------------------------- 备源：腾讯
 
+# 腾讯 hy2 每页条数。2026-11-27 实测 count=200 一次返回全部 124 条（0.20s），
+# 原来 offset=0/100 两页是纯浪费——第二页只为了接住可能超出的 24 条。
+# 保留「满页就继续翻」的循环：万一以后板块扩容超过 200 条，行为自动正确。
+TX_PAGE = 200
+TX_PAGE_MAX = 5              # 防御性上限，避免异常响应导致死循环
+
+
 def _tx_rows(refresh: bool = False) -> list[dict]:
     """腾讯申万二级排行（124 个，与本地 sectors.json 同一套代码）。"""
     t, cached = _MEM["tx"]
     if cached and not refresh and time.time() - t < 300:
         return cached
     rows: list[dict] = []
-    for off in (0, 100):
-        q = ("?board_type=hy2&sort_type=PriceRatio&direct=down&offset=%d&count=100" % off)
+    off = 0
+    for _ in range(TX_PAGE_MAX):
+        q = ("?board_type=hy2&sort_type=PriceRatio&direct=down&offset=%d&count=%d"
+             % (off, TX_PAGE))
         d = (_get(TX_RANK_URL + q, timeout=10,
                   headers={"User-Agent": UA["User-Agent"]}).get("data") or {})
-        for x in (d.get("rank_list") or []):
+        page = d.get("rank_list") or []
+        for x in page:
             code = str(x.get("code") or "").upper()
             if not code:
                 continue
@@ -280,8 +265,10 @@ def _tx_rows(refresh: bool = False) -> list[dict]:
                 "main20": int(_num(x.get("zljlr_d20")) * 1e4) if _num(x.get("zljlr_d20")) is not None else None,
                 "inflow": _num(x.get("zllr")), "outflow": _num(x.get("zllc")),
             })
-        if len(d.get("rank_list") or []) < 100:
+        # 不满一页说明已经取完；满页才继续翻（板块扩容时自动接住）
+        if len(page) < TX_PAGE:
             break
+        off += TX_PAGE
     if not rows:
         raise RuntimeError("腾讯 hy2 排行返回空列表")
     _MEM["tx"] = (time.time(), rows)
@@ -320,7 +307,7 @@ def ranking(refresh: bool = False) -> dict:
             _write_json(RANK_CACHE, {"saved_at": out["asof"], "source": "eastmoney", "rows": rows})
             return out
         except Exception as e:  # noqa: BLE001
-            _trip(f"东财 {type(e).__name__}: {e}")
+            _trip(f"东财 {type(e).__name__}: {e}", host="push2.eastmoney.com")
 
     # 2) 腾讯
     try:
@@ -344,6 +331,94 @@ def ranking(refresh: bool = False) -> dict:
         _MEM["rank"] = (time.time(), out)
         return out
     raise RuntimeError(f"资金流无可用数据（{note or '上游全部失败，且无本地缓存'}）")
+
+
+# ---------------------------------------------------------------- 全板块快照（批量）
+
+# 一次 clist 就能拿到的列：
+#   f12 板块代码  f14 名称  f2 最新  f17 今开  f15 最高  f16 最低  f18 昨收
+#   f5 成交量(手) f6 成交额(元) f3 涨跌幅
+#   f62 主力净流入(元) f184 主力净占比 f66 超大单 f72 大单
+# 也就是说「全部板块的当日 OHLCV + 资金流」= 1 次请求，而不是 124 次逐板块 kline。
+SNAP_FIELDS = "f12,f14,f2,f15,f16,f17,f18,f5,f6,f3,f62,f184,f66,f72"
+SNAP_PZ_BIG = 1000           # 优先每页 1000 条（496 个行业一页装得下）
+SNAP_PZ_SMALL = 100          # 被上游拒绝放大时退回旧分页
+SNAP_TTL = 60.0              # 快照内存缓存：盘中 60s，收盘后调用方自会落库
+
+
+def sector_snapshot(fresh: bool = False) -> dict:
+    """一次 clist 取回**全部行业板块**的当日 OHLCV + 资金流，键为 BK 代码。
+
+    为什么要有它
+      补齐板块日 K 原来是「124 个板块逐个抓 kline」，124 次串行请求。但每天只有
+      「今天这一根」是新的，其余 500 根早在 klines.json 里。clist 是列表快照接口，
+      一次就能返回全部板块的当前字段值，于是 124 次 → 1 次（pz 被拒时 5 次）。
+
+    局限（调用方必须知道）
+      1. 只有「当日一根」，补不了历史。落后 >1 天仍要逐板块抓 kline。
+      2. 盘中拿到的是**未收盘的半根 K**，绝不能直接写进 klines.json。
+         本函数只负责取数并标 `closed`，写不写由 jobs/fetch_sector_klines 判断。
+      3. 部分板块的 f15/f16/f17 可能返回 '-'，此时 open/high/low 用 close 兜底，
+         并置 `ohlc_partial=True`，调用方可据此决定是否采信。
+
+    返回 {asof, closed, source, pz, pages, total, count, rows: {BK: {...}}}
+    """
+    t, cached = _MEM.get("snap") or (0.0, None)
+    if cached is not None and not fresh and time.time() - t < SNAP_TTL:
+        return cached
+    if upstream_state()["blocked"]:
+        raise RuntimeError("东财熔断中，板块快照不可用")
+
+    rows: dict[str, dict] = {}
+    pz, pages, total = SNAP_PZ_BIG, 0, 0
+    # 先试 pz=1000；若上游拒绝放大（返回空 diff）再退 100 逐页翻。
+    for attempt_pz in (SNAP_PZ_BIG, SNAP_PZ_SMALL):
+        pz, pn, pages, got_any = attempt_pz, 1, 0, False
+        rows.clear()
+        while pn <= 12:                      # 496 个行业 / 100 = 5 页，12 页足够防御
+            q = (f"?fid=f12&po=0&pz={pz}&pn={pn}&np=1&fltt=2&invt=2"
+                 f"&fs=m:90+t:2&fields={SNAP_FIELDS}")
+            d = _get(CLIST_URL + q, timeout=10).get("data") or {}
+            diff = d.get("diff") or []
+            total = int(d.get("total") or 0)
+            pages += 1
+            if diff:
+                got_any = True
+            for x in diff:
+                bk = str(x.get("f12") or "").upper()
+                close = _num(x.get("f2"))
+                if not bk.startswith("BK") or not close or close <= 0:
+                    continue
+                op, hi, lo = _num(x.get("f17")), _num(x.get("f15")), _num(x.get("f16"))
+                rows[bk] = {
+                    "name": x.get("f14"), "close": close,
+                    "open": op or close, "high": hi or close, "low": lo or close,
+                    "prev_close": _num(x.get("f18")),
+                    "volume": _num(x.get("f5")) or 0,
+                    "amount": _num(x.get("f6")),
+                    "chg": _num(x.get("f3")),
+                    "main": _num(x.get("f62")),
+                    "main_pct": _num(x.get("f184")),
+                    "super": _num(x.get("f66")),
+                    "big": _num(x.get("f72")),
+                    "ohlc_partial": not (op and hi and lo),
+                }
+            if not diff or (total and len(rows) >= total):
+                break
+            pn += 1
+            time.sleep(0.2)
+        if got_any or attempt_pz == SNAP_PZ_SMALL:
+            break
+        time.sleep(0.3)                      # 放大被拒，稍等再退旧分页
+
+    if not rows:
+        raise RuntimeError("东财 clist 板块快照返回空")
+    # 15:05 前拿到的当日 K 是半根，closed=False；调用方不得写库。
+    hm = time.strftime("%H:%M")
+    out = {"asof": _now(), "closed": hm >= "15:05", "source": "eastmoney",
+           "pz": pz, "pages": pages, "total": total, "count": len(rows), "rows": rows}
+    _MEM["snap"] = (time.time(), out)
+    return out
 
 
 # ---------------------------------------------------------------- 历史
@@ -400,7 +475,7 @@ def history(bk: str, days: int = 15) -> dict:
                 return out
             raise RuntimeError("fflow 返回空")
         except Exception as e:  # noqa: BLE001
-            _trip(f"东财 fflow {type(e).__name__}: {e}")
+            _trip(f"东财 fflow {type(e).__name__}: {e}", host="push2his.eastmoney.com")
 
     ck = (_read_json(cpath) or {}).get("data") or {}
     if ck.get("days"):
@@ -450,12 +525,17 @@ def fetch_bk_kline(bk: str, limit: int = 500) -> list[dict]:
                 "amount": _num(p[6]),
             })
         bars.sort(key=lambda x: x["date"])
+        if bars:
+            _MEM["kline_streak"] = 0          # 通了即清零，偶发失败不累积
+            _MEM["kline_last_ok"] = time.time()
         return bars
     except Exception as e:  # noqa: BLE001
-        # 单个板块失败不触发全局熔断：批量补齐时某个 BK 偶发断连不该让剩余全部跳过。
-        # 只记录原因返回空，由调用方按「连续失败 N 次」自行决定暂停。
+        # 2026-11-27 P0 改造：连接层判定与长熔断已统一由 nethttp 处理
+        # （按 host 累计 streak，连续 3 次即 3600s 静默并落盘共享）。
+        # 这里只做两件事：记录原因给上层脚本打印；镜像 streak 供日志观察。
         msg = f"东财 kline {bk} {type(e).__name__}: {e}"
         _MEM["last_kline_error"] = msg[:200]
+        _MEM["kline_streak"] = int(nethttp.eastmoney_state().get("streak") or 0)
         return []
 
 

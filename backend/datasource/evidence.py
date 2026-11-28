@@ -28,9 +28,42 @@ from datetime import datetime
 import screener as scr
 
 from data_paths import DATA_DIR
+from datasource import nethttp, ttlcache
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CASE_DIR = os.path.join(DATA_DIR, "cases")
 CACHE_DIR = os.path.join(DATA_DIR, "cache")
+
+# 2026-11-27：缓存粒度从「整包按日落盘」下沉到「每个子调用」。
+# 整包缓存（cases/{day}/{code}.json）只作为快照存档与 60s 去抖，不再决定数据新鲜度。
+CASE_DEBOUNCE = 60.0      # 整包组装结果的内存复用窗口（秒）；超过即重新组装
+CLOSE_HM = "15:05"        # 收盘判定（含集合竞价后的撮合与回写延迟）
+
+
+def _today() -> str:
+    return datetime.now().strftime("%Y-%m-%d")
+
+
+def _closed_now() -> bool:
+    return time.strftime("%H:%M") >= CLOSE_HM
+
+
+def _secs_to_close() -> float:
+    """距 15:05 还有多少秒（下限 60）。盘中使用：磁盘缓存活到收盘即失效。"""
+    now = datetime.now()
+    close = now.replace(hour=15, minute=5, second=0, microsecond=0)
+    return max(60.0, (close - now).total_seconds())
+
+
+def _ttl_for(day: str, live: float) -> tuple[float, float]:
+    """按「这只票的日期」决定 (内存 TTL, 磁盘 TTL)。
+
+    历史日 / 当日已收盘 → 永久（数据不再变）；
+    当日盘中 → 内存 live 秒（分时 60s、资金流 120s），磁盘活到收盘（跨进程复用当天抓取）。
+    """
+    day = day or _today()
+    if day < _today() or (day == _today() and _closed_now()):
+        return ttlcache.INF, ttlcache.INF
+    return live, min(6 * 3600.0, _secs_to_close())
 
 UA = {
     "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -53,18 +86,15 @@ def _f(v):
         return None
 
 
-def _get(url: str, timeout: int = 12, retry: int = 2) -> str:
-    last = None
-    for i in range(retry + 1):
-        try:
-            with urllib.request.urlopen(urllib.request.Request(url, headers=UA),
-                                        timeout=timeout) as r:
-                return r.read().decode("utf-8", "ignore")
-        except Exception as e:
-            last = e
-            if i < retry:
-                time.sleep(0.5)
-    raise last  # type: ignore[misc]
+def _get(url: str, timeout: int = 12, retry: int = 0) -> str:
+    """取东财原始文本：统一走 nethttp（动态代理 + host 熔断 + 连接层不重试）。
+
+    2026-11-27 P0 改造：retry 默认从 2 降到 0。一次完整档案要打 8 类接口，
+    每个接口最多重试 3 遍意味着最坏 24 次请求；而 TCP 层被掐断时（rc=56 /
+    RemoteDisconnected）这些重试全打在同一个封禁窗口上，只会延长封禁。
+    现在连接层错误由 nethttp 直接止损并累计 host streak，普通错误也默认不重试。
+    """
+    return nethttp.http_text(url, timeout=timeout, retry=retry, headers=UA)
 
 
 def secid(code: str) -> str:
@@ -119,7 +149,7 @@ def _hhmmss(v) -> str | None:
 
 
 # ------------------------------------------------------------------ 公告
-def announcements(code: str, days: int = 10, limit: int = 12) -> list[dict]:
+def _announcements_raw(code: str, days: int = 10, limit: int = 12) -> list[dict]:
     q = urllib.parse.urlencode({
         "sr": -1, "page_size": limit, "page_index": 1, "ann_type": "A",
         "client_source": "web", "stock_list": code[2:], "f_node": 0, "s_node": 0,
@@ -138,8 +168,19 @@ def announcements(code: str, days: int = 10, limit: int = 12) -> list[dict]:
     return out
 
 
+def announcements(code: str, days: int = 10, limit: int = 12) -> list[dict]:
+    """近 N 日公告：6 小时 TTL（落盘跨进程复用）。
+
+    公告一天只变几条，远低于行情频率。原来每次点开证据包都重打一次，
+    85 只巡检每天就是 85 次；现在同一窗口内只真打一次。
+    """
+    return ttlcache.cached(f"ann:{code}:{days}:{limit}", 6 * 3600,
+                           lambda: _announcements_raw(code, days, limit),
+                           disk="ann", disk_ttl=6 * 3600)
+
+
 # ------------------------------------------------------------------ 新闻
-def news(code: str, name: str, limit: int = 8) -> list[dict]:
+def _news_raw(code: str, name: str, limit: int = 8) -> list[dict]:
     param = {
         "uid": "", "keyword": name, "type": ["cmsArticleWebOld"],
         "client": "web", "clientType": "web", "clientVersion": "curr",
@@ -162,8 +203,14 @@ def news(code: str, name: str, limit: int = 8) -> list[dict]:
     return out
 
 
+def news(code: str, name: str, limit: int = 8) -> list[dict]:
+    """相关新闻：30 分钟 TTL（只放内存）。新闻是「归因旁证」，不需要秒级新鲜。"""
+    return ttlcache.cached(f"news:{code}:{limit}", 1800,
+                           lambda: _news_raw(code, name, limit))
+
+
 # ------------------------------------------------------------------ 龙虎榜
-def dragon_tiger(code: str, day: str) -> dict:
+def _dragon_tiger_raw(code: str, day: str) -> dict:
     flt = f"(TRADE_DATE%3D%27{day}%27)(SECURITY_CODE%3D%22{code[2:]}%22)"
     q = (f"?reportName=RPT_DAILYBILLBOARD_DETAILSNEW&columns=ALL&filter={flt}"
          f"&pageNumber=1&pageSize=10&source=WEB&client=WEB")
@@ -184,8 +231,16 @@ def dragon_tiger(code: str, day: str) -> dict:
     }
 
 
+def dragon_tiger(code: str, day: str) -> dict:
+    """龙虎榜：盘中 30 分钟（盘后 ~18:00 才出数据），历史日永久。"""
+    mem, disk = _ttl_for(day, 1800)
+    return ttlcache.cached(f"lhb:{code}:{day}", mem,
+                           lambda: _dragon_tiger_raw(code, day),
+                           disk="lhb", disk_ttl=disk)
+
+
 # ------------------------------------------------------------------ 资金流
-def fund_flow(code: str, days: int = 5) -> dict:
+def _fund_flow_raw(code: str, days: int = 5) -> dict:
     q = (f"?lmt={days}&klt=101&secid={secid(code)}&fields1=f1,f2,f3,f7"
          f"&fields2=f51,f52,f53,f54,f55,f56,f57")
     d = json.loads(_get(FLOW_URL + q))
@@ -209,6 +264,15 @@ def fund_flow(code: str, days: int = 5) -> dict:
         "main_net_5d": sum((r["main"] or 0) for r in rows),
         "rows": rows,
     }
+
+
+def fund_flow(code: str, days: int = 5, day: str | None = None) -> dict:
+    """近 N 日主力资金：盘中 120 秒，历史日/收盘后永久。"""
+    day = day or _today()
+    mem, disk = _ttl_for(day, 120)
+    return ttlcache.cached(f"flow:{code}:{day}:{days}", mem,
+                           lambda: _fund_flow_raw(code, days),
+                           disk="flow", disk_ttl=disk)
 
 
 # ------------------------------------------------------------------ 分时
@@ -469,7 +533,7 @@ def trend_on(code: str, day: str) -> dict:
     return out
 
 
-def intraday(code: str, prev_close: float | None) -> dict:
+def _intraday_raw(code: str, prev_close: float | None) -> dict:
     # 统一走 trend_points，东财挂了会自动落到腾讯，不用在这里再写一遍取数
     try:
         tp = trend_points(code, 1)
@@ -518,8 +582,20 @@ def intraday(code: str, prev_close: float | None) -> dict:
     }
 
 
+def intraday(code: str, prev_close: float | None, day: str | None = None) -> dict:
+    """当日分时摘要：盘中 60 秒、收盘后永久。
+
+    盘中分时是「必须重取」的那一类，所以 TTL 只给 60s；但同一分钟内
+    反复点开同一只票不该重复打上游。
+    """
+    day = day or _today()
+    mem, _ = _ttl_for(day, 60)
+    return ttlcache.cached(f"intraday:{code}:{day}", mem,
+                           lambda: _intraday_raw(code, prev_close))
+
+
 # ------------------------------------------------------------------ 日线历史
-def history(code: str, day: str, bars: int = 40) -> dict:
+def _history_raw(code: str, day: str, bars: int = 40) -> dict:
     """近 N 个交易日日线 + 衍生位（近 20 日新高/放量倍数/连涨/区间涨幅）"""
     q = (f"?secid={secid(code)}&klt=101&fqt=1&lmt={bars}&end=20500101"
          f"&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57")
@@ -561,6 +637,17 @@ def history(code: str, day: str, bars: int = 40) -> dict:
     }
 
 
+def history(code: str, day: str, bars: int = 40) -> dict:
+    """近 N 日日线 + 衍生位：盘中 60 秒（最后一根在变），收盘后永久。
+
+    键里带 day，所以「看历史某天」和「看今天」是两份缓存，互不覆盖。
+    """
+    mem, disk = _ttl_for(day, 60)
+    return ttlcache.cached(f"hist:{code}:{day}:{bars}", mem,
+                           lambda: _history_raw(code, day, bars),
+                           disk="kline", disk_ttl=disk)
+
+
 # ------------------------------------------------------------------ 组装
 def _screener_row(code: str, day: str) -> dict:
     d = scr.load(day)
@@ -588,7 +675,7 @@ def _sector_snapshot(ind_pt: str | None) -> dict:
     return {}
 
 
-def _live_quote(code: str) -> dict:
+def _live_quote_raw(code: str) -> dict:
     """腾讯实时快照兜底（不在当日异动池时用），字段对齐 screener 行"""
     try:
         import profile
@@ -608,16 +695,46 @@ def _live_quote(code: str) -> dict:
     }
 
 
-def build_case(code: str, day: str | None = None, refresh: bool = False) -> dict:
-    """组装单只个股的当日证据包（含各源可用性标记）"""
+def _live_quote(code: str) -> dict:
+    """实时快照 60 秒 TTL：盘口兜底不需要秒级，避免每次「刷新」都白打一次腾讯。"""
+    return ttlcache.cached(f"quote:{code}", 60, lambda: _live_quote_raw(code))
+
+
+def build_case(code: str, day: str | None = None, refresh: bool = False,
+               hard: bool = False) -> dict:
+    """组装单只个股的当日证据包（含各源可用性标记）。
+
+    2026-11-27：缓存粒度下沉到子调用（见 datasource/ttlcache.py）。
+
+    · 整包文件退化为「快照存档 + 60 秒去抖」，不再决定数据新鲜度——
+      以前 09:40 建的包，下午 15:00 打开还是早上的数据。
+    · refresh=True 只清「盘中会变」的三类键（intraday / hist / flow），
+      公告 6h、新闻 30min、龙虎榜当日一次、盘口 60s 照旧命中；
+      于是强制重建从 7 次外呼降到 2~3 次，缓存不再形同虚设。
+    · hard=True 才是「真的全部重打」，给排查与人工兜底用（管理端点显式传 hard=1）。
+    """
     im = scr.industry_map()
     day = day or (scr.dates() or [datetime.now().strftime("%Y-%m-%d")])[0]
     path = os.path.join(CASE_DIR, day, f"{code}.json")
-    if not refresh and os.path.exists(path):
+
+    if hard:
+        # 全清：只在「怀疑缓存本身有问题」时用，正常前端刷新不要走这里
+        for p in ("intraday:", "hist:", "flow:", "ann:", "news:", "lhb:", "quote:"):
+            ttlcache.drop(p)
+    elif refresh:
+        # 只清可变键。公告/新闻/龙虎榜刻意不清：它们一天只变几次，
+        # 清掉就等于把「刷新」退化成「全量重打」。
+        for p in ("intraday:", "hist:", "flow:"):
+            ttlcache.drop(p)
+    elif os.path.exists(path):
+        # 60 秒内重复打开同一只票：复用刚组装好的整包，避免高频点开时反复拼装。
+        # 超过 60 秒就重新组装——各子调用自己会命中缓存，只重算分数，不打上游。
         try:
-            cached = json.load(open(path, encoding="utf-8"))
-            if cached.get("schema") == 1:
-                return cached
+            if time.time() - os.path.getmtime(path) < CASE_DEBOUNCE:
+                cached = json.load(open(path, encoding="utf-8"))
+                if cached.get("schema") == 1:
+                    cached["cache"] = "debounce"
+                    return cached
         except Exception:
             pass
 
@@ -664,7 +781,7 @@ def build_case(code: str, day: str | None = None, refresh: bool = False) -> dict
 
     # 分时
     try:
-        case["intraday"] = intraday(code, prev)
+        case["intraday"] = intraday(code, prev, day)
         status["intraday"] = bool(case["intraday"])
     except Exception:
         case["intraday"], status["intraday"] = {}, False
@@ -678,7 +795,7 @@ def build_case(code: str, day: str | None = None, refresh: bool = False) -> dict
 
     # 资金流
     try:
-        case["flow"] = fund_flow(code)
+        case["flow"] = fund_flow(code, day=day)
         status["flow"] = bool(case["flow"])
     except Exception:
         case["flow"], status["flow"] = {}, False
