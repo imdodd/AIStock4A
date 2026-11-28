@@ -361,6 +361,58 @@ def existing_codes() -> list[str]:
                   if f.endswith(".md") and not f.startswith("_"))
 
 
+def major_hot(codes: list[str]) -> dict[str, str]:
+    """批量粗筛：返回「可能有新公告、需要逐只精查」的 ``{code: 最新公告日}``。
+
+    粗筛口径刻意保守：
+      · 批量接口给出最新公告日期 > 上次已精查日期（notice_seen）→ 热；
+      · 没有 notice_seen 时退化为与档案生成日比较；
+      · 这组公告被分页截断（可能有票被挤出）→ 整组热；
+      · 批量接口失败 / 不支持多值 → **返回全部**，退化为旧的逐只巡检。
+
+    宁可直接多打几次 F10，也不能因为优化把公告漏掉。
+    """
+    if not codes:
+        return {}
+    try:
+        latest = prof.notice_dates_batch(codes)
+    except Exception:  # noqa: BLE001
+        return {c: "?" for c in codes}
+    if not latest:
+        return {c: "?" for c in codes}
+    hot: dict[str, str] = {}
+    for c in codes:
+        d = latest.get(c)
+        if d is None:
+            continue                       # 这组最近 100 条里没有它 → 无新公告
+        if d == prof.ANN_TRUNC:
+            hot[c] = d
+            continue
+        meta = _load_meta(c)
+        seen = (meta.get("notice_seen") or meta.get("generated_at") or "")[:10]
+        if not seen or d > seen:           # 严格大于：等于「已看过的那天」不算新
+            hot[c] = d
+    return hot
+
+
+def mark_notice_seen(code: str, day: str) -> None:
+    """记住「这只票的公告已精查过，最新到 day」，下次粗筛不再重复精查。
+
+    只记日期不记指纹：指纹仍由 major_changed 现算，这里只避免每天把同一批
+    老公告重新精查一遍（否则 85 只里会有几十只天天「热」）。
+    """
+    if not day or day in ("?", prof.ANN_TRUNC):
+        return
+    meta = _load_meta(code)
+    if not meta or meta.get("notice_seen") == day:
+        return
+    meta["notice_seen"] = day
+    try:
+        _atomic(_meta_path(code), json.dumps(meta, ensure_ascii=False, indent=1))
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def major_changed(code: str) -> bool:
     """只打一次 F10 公告接口，判断重大公告指纹是否变化（EOD 每日巡检用）。"""
     meta = _load_meta(code)

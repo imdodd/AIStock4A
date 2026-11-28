@@ -1,87 +1,77 @@
 @echo off
-setlocal EnableExtensions
-title A¹É½×¶Î¸ú×ÙÑÐ¾¿Æ½Ì¨
+setlocal
+chcp 65001 >nul
+title Aè‚¡é˜¶æ®µè·Ÿè¸ªç ”ç©¶å¹³å°
 
 REM ============================================================
-REM  Ò»¼üÆô¶¯£ºÊ×´ÎÔËÐÐ×Ô¶¯´´½¨ÐéÄâ»·¾³²¢°²×°ÒÀÀµ
-REM  ÓÃ·¨£ºË«»÷ÔËÐÐ£¬ä¯ÀÀÆ÷»á×Ô¶¯´ò¿ª
-REM  Í£Ö¹£º¹Ø±Õ±¾´°¿Ú£¬»ò°´ Ctrl+C
+REM  ä¸€é”®å¯åŠ¨ï¼šé¦–æ¬¡è¿è¡Œè‡ªåŠ¨åˆ›å»ºè™šæ‹ŸçŽ¯å¢ƒå¹¶å®‰è£…ä¾èµ–
+REM  ç”¨æ³•ï¼šåŒå‡»è¿è¡Œï¼Œæµè§ˆå™¨ä¼šè‡ªåŠ¨æ‰“å¼€ http://127.0.0.1:8000/
+REM  åœæ­¢ï¼šå…³é—­æœ¬çª—å£ï¼ˆæˆ–æŒ‰ Ctrl+Cï¼‰
 REM ============================================================
 
 cd /d "%~dp0"
 
-REM ---- 1. ¼ì²â¿ÉÓÃµÄ Python£¨ÓÅÏÈ py Æô¶¯Æ÷£¬ÅÅ³ý Store Õ¼Î» stub£©----
-set "PY="
-py -3 -c "import sys" >nul 2>nul
-if not errorlevel 1 set "PY=py -3"
-if not defined PY (
-  python -c "import sys; exit(0 if sys.version_info >= (3, 9) else 1)" >nul 2>nul
-  if not errorlevel 1 set "PY=python"
-)
-if not defined PY (
-  echo [´íÎó] Î´¼ì²âµ½¿ÉÓÃµÄ Python 3.9+¡£
-  echo        ³£¼ûÔ­Òò£ºµçÄÔÉÏÖ»ÓÐ Microsoft Store µÄ python Õ¼Î»³ÌÐò¡£
-  echo        Çëµ½ https://www.python.org/downloads/ °²×° Python 3.9 »ò¸ü¸ß°æ±¾£¬
-  echo        °²×°Ê±Îñ±Ø¹´Ñ¡ "Add python.exe to PATH"£¬È»ºóÖØÐÂÔËÐÐ±¾½Å±¾¡£
+REM ---- 1. æ£€æŸ¥ Python ----
+where python >nul 2>nul
+if errorlevel 1 (
+  echo [é”™è¯¯] æœªæ£€æµ‹åˆ° Pythonã€‚è¯·å…ˆå®‰è£… Python 3.10 æˆ–æ›´é«˜ç‰ˆæœ¬ï¼š
+  echo        https://www.python.org/downloads/
+  echo        å®‰è£…æ—¶åŠ¡å¿…å‹¾é€‰ "Add python.exe to PATH"
   echo.
   pause
   exit /b 1
 )
-for /f "tokens=2" %%i in ('%PY% --version 2^>^&1') do set PYVER=%%i
+for /f "tokens=2" %%i in ('python --version 2^>^&1') do set PYVER=%%i
 echo [1/4] Python %PYVER% OK
 
-REM ---- 2. ÐéÄâ»·¾³ ----
+REM ---- 2. è™šæ‹ŸçŽ¯å¢ƒ ----
 if not exist .venv\Scripts\python.exe (
-  echo [2/4] Ê×´ÎÔËÐÐ£º´´½¨ÐéÄâ»·¾³£¬Ô¼ 10 Ãë...
-  %PY% -m venv .venv
+  echo [2/4] é¦–æ¬¡è¿è¡Œï¼šåˆ›å»ºè™šæ‹ŸçŽ¯å¢ƒï¼ˆçº¦ 10 ç§’ï¼‰...
+  python -m venv .venv
   if errorlevel 1 (
-    echo [´íÎó] ´´½¨ÐéÄâ»·¾³Ê§°Ü
-    pause
-    exit /b 1
+    echo [é”™è¯¯] åˆ›å»ºè™šæ‹ŸçŽ¯å¢ƒå¤±è´¥ & pause & exit /b 1
   )
 ) else (
-  echo [2/4] ÐéÄâ»·¾³ÒÑ´æÔÚ£¬Ìø¹ý
+  echo [2/4] è™šæ‹ŸçŽ¯å¢ƒå·²å­˜åœ¨ï¼Œè·³è¿‡
 )
 set "VPY=.venv\Scripts\python.exe"
 
-REM ---- 3. ÒÀÀµ ----
+REM ---- 3. ä¾èµ– ----
 if not exist .venv\.deps_installed (
-  echo [3/4] °²×°ÒÀÀµ£¬Ê×´ÎÔ¼ 1-2 ·ÖÖÓ£¬Çë±£³ÖÍøÂç³©Í¨...
+  echo [3/4] å®‰è£…ä¾èµ–ï¼ˆé¦–æ¬¡çº¦ 1-2 åˆ†é’Ÿï¼Œè¯·ä¿æŒç½‘ç»œç•…é€šï¼‰...
   "%VPY%" -m pip install --quiet --upgrade pip
   "%VPY%" -m pip install --quiet -r requirements.txt -r requirements-scheduler.txt
   if errorlevel 1 (
-    echo [´íÎó] ÒÀÀµ°²×°Ê§°Ü£¬Çë¼ì²éÍøÂçºóÖØÊÔ
-    pause
-    exit /b 1
+    echo [é”™è¯¯] ä¾èµ–å®‰è£…å¤±è´¥ï¼Œè¯·æ£€æŸ¥ç½‘ç»œåŽé‡è¯• & pause & exit /b 1
   )
   type nul > .venv\.deps_installed
 ) else (
-  echo [3/4] ÒÀÀµÒÑ°²×°£¬Ìø¹ý
+  echo [3/4] ä¾èµ–å·²å®‰è£…ï¼Œè·³è¿‡
 )
 
-REM ---- 4. ÅäÖÃÎÄ¼þÓëÑùÀýÊý¾Ý ----
+REM ---- 4. é…ç½®æ–‡ä»¶ä¸Žæ ·ä¾‹æ•°æ® ----
 if not exist .env (
   copy /y .env.example .env >nul
-  echo [4/4] ÒÑ´Ó .env.example Éú³É .env£¬Ä¬ÈÏÅäÖÃ¼´¿ÉÔËÐÐ£»ÏëÅä AI »ò¼ìË÷ Key Çë¿´ README ÅäÖÃËµÃ÷
+  echo [4/4] å·²ä»Ž .env.example ç”Ÿæˆ .envï¼ˆé»˜è®¤é…ç½®å³å¯è¿è¡Œï¼›æƒ³é… AI/æ£€ç´¢ Key è¯·çœ‹ READMEã€Œé…ç½®è¯´æ˜Žã€ï¼‰
 ) else (
-  echo [4/4] .env ÒÑ´æÔÚ£¬Ìø¹ý
+  echo [4/4] .env å·²å­˜åœ¨ï¼Œè·³è¿‡
 )
 if not exist backend\data\portfolio\holdings.json (
   if not exist backend\data\portfolio mkdir backend\data\portfolio
   copy /y examples\holdings.example.json backend\data\portfolio\holdings.json >nul
   copy /y examples\watchlist.example.json backend\data\portfolio\watchlist.json >nul
-  echo        ÒÑÆÌÈëÑùÀý³Ö²Ö£¬¿ÉÔÚ½çÃæÀïÉ¾³ýºóÌî×Ô¼ºµÄ
+  echo        å·²é“ºå…¥æ ·ä¾‹æŒä»“ï¼ˆè´µå·žèŒ…å°/ä¸­å›½å¹³å®‰/äº”ç²®æ¶²ï¼Œå¯åœ¨ç•Œé¢é‡Œåˆ é™¤åŽå¡«è‡ªå·±çš„ï¼‰
 )
 
 echo.
 echo ============================================================
-echo   ·þÎñÆô¶¯ÖÐ... µØÖ·: http://127.0.0.1:8000/
+echo   æœåŠ¡å¯åŠ¨ä¸­... åœ°å€: http://127.0.0.1:8000/
 echo.
-echo   Ê×´ÎÊ¹ÓÃ: ÏÈÅÜÒ»´ÎÅÌºó¹ÜµÀÈÃÒ³ÃæÓÐÊý¾Ý£¬Ô¼ 10-20 ·ÖÖÓ:
+echo   é¦–æ¬¡ä½¿ç”¨: å…ˆè·‘ä¸€æ¬¡ç›˜åŽç®¡é“è®©é¡µé¢æœ‰æ•°æ®ï¼ˆçº¦ 10-20 åˆ†é’Ÿï¼‰:
 echo     cd backend
 echo     ..\.venv\Scripts\python -m jobs.eod
 echo.
-echo   ¹Ø±Õ±¾´°¿Ú¼´Í£Ö¹·þÎñ
+echo   å…³é—­æœ¬çª—å£å³åœæ­¢æœåŠ¡
 echo ============================================================
 echo.
 

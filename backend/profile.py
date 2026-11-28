@@ -20,6 +20,7 @@ import urllib.parse
 import urllib.request
 
 from data_paths import DATA_DIR
+from datasource import nethttp
 HERE = os.path.dirname(os.path.abspath(__file__))
 DIR = os.path.join(DATA_DIR, "profile")
 TTL = 24 * 3600
@@ -57,18 +58,12 @@ def _f(v):
 
 
 def _get(url: str, gbk: bool = False, retry: int = 1):
-    last = None
-    for i in range(retry + 1):
-        try:
-            req = urllib.request.Request(url, headers=UA)
-            with urllib.request.urlopen(req, timeout=18) as r:
-                raw = r.read()
-            return raw.decode("gbk", "ignore") if gbk else raw.decode("utf-8", "ignore")
-        except Exception as e:
-            last = e
-            if i < retry:
-                time.sleep(0.6)
-    raise last  # type: ignore[misc]
+    """取文本：统一走 nethttp（动态代理 + host 熔断 + 连接层不重试）。
+
+    腾讯 qt.gtimg.cn 返回 GBK，所以要拿原始字节再按编码解，不能直接取 str。
+    """
+    raw = nethttp.http_bytes(url, timeout=18, retry=retry, headers=UA)
+    return raw.decode("gbk", "ignore") if gbk else raw.decode("utf-8", "ignore")
 
 
 # ------------------------------------------------------------------ 基本信息
@@ -382,6 +377,57 @@ def notices(code: str, limit: int = 12) -> dict:
                 major_count=len(major),
                 major_hash=hashlib.md5(sig.encode("utf-8")).hexdigest()[:12] if sig else "",
                 latest_date=items[0]["date"] if items else None)
+
+
+ANN_BATCH_URL = "https://np-anotice-stock.eastmoney.com/api/security/ann"
+ANN_TRUNC = "TRUNC"          # 该组公告被分页截断，组内全部标为「需精查」
+
+
+def notice_dates_batch(codes: list[str], group: int = 20,
+                       page_size: int = 100) -> dict[str, str]:
+    """一次批量取多只股票的最新公告日期，供 EOD 巡检粗筛。
+
+    为什么不用 F10 的 OperationsRequired
+      那个接口一只票一个请求，85 个已有档案巡检就是 85 次；而 np-anotice 的
+      ``stock_list`` 支持逗号多值，20 只一组 → 5 次，日常无公告日就是 5 次。
+
+    返回 ``{code: "YYYY-MM-DD"}``，另有两种特殊值：
+      · 该 code 不在结果里 → 这组最近 100 条公告里没有它，视为**无新公告**；
+      · 值为 ``ANN_TRUNC``   → 这组公告被分页截断（可能有票被挤出），整组标记**需精查**。
+        宁可多精查几只，也不能因为批量把公告漏掉。
+
+    上游不接受多值（返回空）时抛 RuntimeError，由 research.major_hot 整体回退逐只巡检。
+    """
+    pref = {c[2:]: c for c in codes if len(c) >= 8 and c[2:].isdigit()}
+    if not pref:
+        return {}
+    six = list(pref)
+    out: dict[str, str] = {}
+    for i in range(0, len(six), group):
+        grp = six[i:i + group]
+        q = urllib.parse.urlencode({
+            "sr": -1, "page_size": page_size, "page_index": 1, "ann_type": "A",
+            "client_source": "web", "stock_list": ",".join(grp),
+            "f_node": 0, "s_node": 0,
+        })
+        d = json.loads(_get(f"{ANN_BATCH_URL}?{q}"))
+        rows = ((d.get("data") or {}).get("list") or [])
+        if not rows and len(grp) > 1:
+            raise RuntimeError("np-anotice 多值返回空，疑似不支持 stock_list 批量")
+        truncated = len(rows) >= page_size
+        for x in rows:
+            dt = (x.get("notice_date") or "")[:10]
+            for c in (x.get("codes") or []):
+                sc = str(c.get("stock_code") or "")
+                if sc and (sc not in out or dt > out[sc]):
+                    out[sc] = dt
+        if truncated:
+            # 组内被截断：没出现的票可能是被挤出，而不是「没发公告」，一律标需精查。
+            # 已拿到具体日期的票保留日期（那才是精确信息）。
+            for sc in grp:
+                if sc not in out:
+                    out[sc] = ANN_TRUNC
+    return {pref[k]: v for k, v in out.items() if k in pref}
 
 
 def quotes_many(codes: list[str]) -> dict[str, dict]:

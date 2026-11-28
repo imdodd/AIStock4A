@@ -1,4 +1,4 @@
-"""AIStock4A 存储层。
+"""astock-v2 存储层。
 
 目录职责：blueprint 里原本拆成 db/（连接）与 repository/（业务接口）两个包，
 这里合并为 db/ 一处 —— 两者共用 tables.py 的表定义，再拆一层只会多一次跳转。

@@ -139,8 +139,16 @@ def build_sector(ptcode: str, meta: dict, src: TencentSource, bench, force=False
     codes = [m["code"] for m in members if not m["code"].startswith("bj")]
     bars = src.fetch_kline(codes, limit=KLINE_LIMIT)
     if not bars:
-        # 整批取不到（多为被限流），不要写空快照覆盖掉旧数据
-        print(f"  [fail] {meta.get('name', ptcode)}：K 线一只都没取到，跳过（多为接口限流）")
+        # 整批取不到：打印真实原因，不要写空快照覆盖掉旧数据。
+        # 以前写死"多为接口限流"，DNS 失败/网络断连/上游空数据都报同一句，
+        # 排查时会被误导去治限流而放过真正的网络问题。
+        from datasource import tencent as _tx
+        diag = _tx.last_kline_diag or {}
+        tx = diag.get("tx") or "无记录"
+        sina = diag.get("sina") or "无记录"
+        mode = "新浪兜底" if diag.get("sina_only") else "腾讯主源"
+        print(f"  [fail] {meta.get('name', ptcode)}：K 线一只都没取到（{len(codes)} 只，"
+              f"{mode}）；腾讯={tx}；新浪={sina}。保留旧快照不覆盖。")
         return None
 
     unsupported_set = set(unsupported)

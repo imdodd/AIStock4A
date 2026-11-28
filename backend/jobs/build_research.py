@@ -85,6 +85,8 @@ def main(argv=None) -> int:
     ap.add_argument("--inspect-gap", type=float, default=0.5,
                     help="巡检每只票之间的间隔秒数（默认 0.5，避免连续打 F10）")
     ap.add_argument("--no-inspect", action="store_true", help="跳过重大公告巡检")
+    ap.add_argument("--no-batch", action="store_true",
+                    help="巡检不走批量粗筛，逐只打 F10（回退旧行为，排查用）")
     a = ap.parse_args(argv)
 
     # 开源版默认不带 data/.secrets/llm.json。没有模型通道时生成模板档案即可，
@@ -132,15 +134,32 @@ def main(argv=None) -> int:
     if not a.no_inspect and not a.only:
         existing = [c for c in research.existing_codes() if c not in set(targets)]
         weekly = datetime.now().weekday() == 0
+        full = a.full_check or weekly
+        # 2026-11-27：先用批量公告接口粗筛，只对「可能有新公告」的票做 F10 精查。
+        # 85 只巡检从 85 次 F10 降到 1~5 次批量 + 少数几次精查。
+        # 周一/--full-check 要查财报与目标价变化，与公告无关，仍走全量。
+        # 周一/--full-check 要查财报与目标价变化，与公告无关，仍走全量。
+        if not existing:
+            hot: dict[str, str] = {}
+        elif a.no_batch or full:
+            hot = {c: "?" for c in existing}
+        else:
+            hot = research.major_hot(existing)
         log(f"[研究档案] 巡检已有档案 {len(existing)} 只"
-            f"（{'完整证据检查' if a.full_check or weekly else '重大公告指纹'}）")
+            f"（{'完整证据检查' if full else '重大公告指纹'}）"
+            + ("· 逐只模式" if (a.no_batch or full) else f"· 批量粗筛命中 {len(hot)} 只需精查"))
         todo = []
         for i, c in enumerate(existing):
+            if c not in hot:
+                continue
             if i and a.inspect_gap > 0:
                 time.sleep(a.inspect_gap)   # 摊平连续 F10 请求，避免瞬间突发触发限流
             inspected += 1
             hit = research.major_changed(c)
-            if not hit and (a.full_check or weekly):
+            if not hit and not full:
+                # 精查过且指纹没变 → 记住「已看到哪天」，明天不再重复精查
+                research.mark_notice_seen(c, hot.get(c) or "")
+            if not hit and full:
                 try:
                     need, _ = research.needs_refresh(c, research.evidence(c))
                     hit = need
@@ -160,7 +179,7 @@ def main(argv=None) -> int:
     skip = sum(1 for r in results if r.get("skipped"))
     err = sum(1 for r in results if r.get("error"))
     log(f"[研究档案] 完成：新建/重建 {ok} · 跳过 {skip} · 失败 {err} · "
-        f"巡检 {inspected} · 公告触发重建 {rebuilt} · "
+        f"精查 {inspected} · 公告触发重建 {rebuilt} · "
         f"档案总数 {len(research.existing_codes())} · 耗时 {time.time() - t0:.1f}s")
     return 0 if err == 0 else 1
 

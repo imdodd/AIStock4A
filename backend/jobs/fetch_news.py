@@ -54,6 +54,7 @@ env_loader.load_env()
 from data_paths import DATA_DIR  # noqa: E402
 
 import news  # noqa: E402
+from datasource import nethttp  # noqa: E402
 from jobs import news_update  # noqa: E402
 
 INBOX = os.path.join(DATA_DIR, "inbox", "news_raw")
@@ -106,10 +107,12 @@ def _http(url: str, *, headers: dict | None = None, body: dict | None = None,
     if headers:
         h.update(headers)
     data = json.dumps(body, ensure_ascii=False).encode("utf-8") if body is not None else None
-    req = urllib.request.Request(url, data=data, headers=h)
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            return r.read().decode("utf-8", "ignore")
+        # 统一出口：动态代理 + host 熔断 + 连接层不重试。
+        # 资讯本身已是「单次不重试」的设计，这里 retry=0 保持一致。
+        return nethttp.http_text(url, headers=h, data=data, timeout=timeout, retry=0)
+    except nethttp.CircuitOpen as e:
+        raise CircuitOpen(str(e)) from e
     except Exception:
         _HOST_FAILS[host] = _HOST_FAILS.get(host, 0) + 1
         raise
